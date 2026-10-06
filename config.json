@@ -1,9 +1,9 @@
 {
-  "rsi_period": 14,
-  "rsi_oversold": 35,
-  "rsi_overbought": 65,
+  "rsi_period": 21,
+  "rsi_oversold": 30,
+  "rsi_overbought": 70,
   "stop_loss_pct": 0.006,
   "take_profit_pct": 0.012,
-  "last_tuned": "2026-10-03T00:47:24.367924+00:00",
-  "backtest_return_pct": 9.0
+  "last_tuned": "2026-10-06T01:57:55.667854+00:00",
+  "backtest_return_pct": 10.2
 }
