@@ -1,14 +1,21 @@
 """
 Writes the files the dashboard reads, and publishes them to a git branch.
 
-Files (one folder per strategy, so more strategies can be added later):
+File version: 2.0.0
+  2.0.0: one Publisher now serves several strategies (a store per strategy),
+         and stores can keep a small state file between runs.
+  1.0.0: single strategy.
+
+Files (one folder per strategy):
 
     strategies.json                    list of strategies, for the dashboard's switcher
     <strategy-id>/status.json          latest snapshot: account, positions, orders, bot health
     <strategy-id>/equity.csv           account value over time
     <strategy-id>/decisions.jsonl      every check the bot ran, and why
     <strategy-id>/orders.jsonl         every order the bot placed or tried to place
+    <strategy-id>/trades.jsonl         every closed trade, with its profit or loss
     <strategy-id>/meta.json            when tracking began and the starting balance
+    <strategy-id>/state.json           the bot's own notes between runs (not shown on the dashboard)
 
 On GitHub Actions (DASHBOARD_BRANCH is set) these files live on their own
 branch, "dashboard-data", kept as a SINGLE commit that is rewritten on every
@@ -31,17 +38,69 @@ from pathlib import Path
 
 log = logging.getLogger("publisher")
 
-MAX_LINES = {"decisions.jsonl": 1500, "orders.jsonl": 500}
+MAX_LINES = {"decisions.jsonl": 2500, "orders.jsonl": 600, "trades.jsonl": 1500}
 MAX_EQUITY_ROWS = 20000
+
+CLOCK = lambda: datetime.now(timezone.utc)   # the tests swap this for a simulated clock
 
 
 def utc_now_iso() -> str:
-    return datetime.now(timezone.utc).isoformat(timespec="seconds")
+    return CLOCK().isoformat(timespec="seconds")
+
+
+class StrategyStore:
+    """The files of one strategy. Same job the old single-strategy Publisher had."""
+
+    def __init__(self, root: Path, strategy_id: str):
+        self.id = strategy_id
+        self.dir = root / strategy_id
+        self.dir.mkdir(parents=True, exist_ok=True)
+
+    def write_json(self, name, obj):
+        tmp = self.dir / f".{name}.tmp"
+        tmp.write_text(json.dumps(obj, separators=(",", ":"), default=str), encoding="utf-8")
+        tmp.replace(self.dir / name)
+
+    def read_json(self, name, default=None):
+        try:
+            return json.loads((self.dir / name).read_text(encoding="utf-8"))
+        except Exception:
+            return default
+
+    def append_jsonl(self, name, record):
+        with open(self.dir / name, "a", encoding="utf-8") as f:
+            f.write(json.dumps(record, separators=(",", ":"), default=str) + "\n")
+
+    def append_equity(self, timestamp_iso, equity):
+        path = self.dir / "equity.csv"
+        is_new = not path.exists() or path.stat().st_size == 0
+        with open(path, "a", newline="", encoding="utf-8") as f:
+            w = csv.writer(f)
+            if is_new:
+                w.writerow(["t", "equity"])
+            w.writerow([timestamp_iso, f"{equity:.2f}"])
+
+    def equity_rows(self) -> int:
+        path = self.dir / "equity.csv"
+        if not path.exists():
+            return 0
+        with open(path, encoding="utf-8") as f:
+            return max(0, sum(1 for _ in f) - 1)
+
+    def meta(self, equity=None) -> dict:
+        """Tracking start date and starting balance, set once and then kept."""
+        existing = self.read_json("meta.json")
+        if existing:
+            return existing
+        if equity is None:
+            return {}
+        meta = {"tracking_since": utc_now_iso(), "starting_equity": round(float(equity), 2)}
+        (self.dir / "meta.json").write_text(json.dumps(meta), encoding="utf-8")
+        return meta
 
 
 class Publisher:
-    def __init__(self, strategy_id, local_dir="dashboard_data", branch=None, worktree_dir="data-branch"):
-        self.strategy_id = strategy_id
+    def __init__(self, local_dir="dashboard_data", branch=None, worktree_dir="data-branch"):
         self.branch = (branch if branch is not None else os.environ.get("DASHBOARD_BRANCH", "")).strip()
         self.git_enabled = False
         self.root = Path(local_dir)
@@ -55,8 +114,10 @@ class Publisher:
                 log.warning(f"Could not set up the {self.branch} branch ({e}). "
                             f"Dashboard data will be written locally only.")
 
-        self.dir = self.root / strategy_id
-        self.dir.mkdir(parents=True, exist_ok=True)
+        self.root.mkdir(parents=True, exist_ok=True)
+
+    def store(self, strategy_id) -> StrategyStore:
+        return StrategyStore(self.root, strategy_id)
 
     # ------------------------------------------------------------------ git
 
@@ -113,57 +174,24 @@ class Publisher:
 
     # ---------------------------------------------------------------- files
 
-    def write_json(self, name, obj, root_level=False):
-        base = self.root if root_level else self.dir
-        tmp = base / f".{name}.tmp"
-        tmp.write_text(json.dumps(obj, separators=(",", ":"), default=str), encoding="utf-8")
-        tmp.replace(base / name)
-
-    def append_jsonl(self, name, record):
-        with open(self.dir / name, "a", encoding="utf-8") as f:
-            f.write(json.dumps(record, separators=(",", ":"), default=str) + "\n")
-
-    def append_equity(self, timestamp_iso, equity):
-        path = self.dir / "equity.csv"
-        is_new = not path.exists() or path.stat().st_size == 0
-        with open(path, "a", newline="", encoding="utf-8") as f:
-            w = csv.writer(f)
-            if is_new:
-                w.writerow(["t", "equity"])
-            w.writerow([timestamp_iso, f"{equity:.2f}"])
-
-    def equity_rows(self) -> int:
-        path = self.dir / "equity.csv"
-        if not path.exists():
-            return 0
-        with open(path, encoding="utf-8") as f:
-            return max(0, sum(1 for _ in f) - 1)
-
-    def meta(self, equity=None) -> dict:
-        """Tracking start date and starting balance, set once and then kept."""
-        path = self.dir / "meta.json"
-        try:
-            return json.loads(path.read_text(encoding="utf-8"))
-        except Exception:
-            pass
-        if equity is None:
-            return {}
-        meta = {"tracking_since": utc_now_iso(), "starting_equity": round(float(equity), 2)}
-        path.write_text(json.dumps(meta), encoding="utf-8")
-        return meta
-
     def write_index(self, strategies):
-        self.write_json("strategies.json", {"updated_at": utc_now_iso(), "strategies": strategies}, root_level=True)
+        obj = {"updated_at": utc_now_iso(), "strategies": strategies}
+        tmp = self.root / ".strategies.json.tmp"
+        tmp.write_text(json.dumps(obj, separators=(",", ":"), default=str), encoding="utf-8")
+        tmp.replace(self.root / "strategies.json")
 
     def _trim_files(self):
-        for name, keep in MAX_LINES.items():
-            path = self.dir / name
+        for sdir in self.root.iterdir():
+            if not sdir.is_dir() or sdir.name.startswith("."):
+                continue
+            for name, keep in MAX_LINES.items():
+                path = sdir / name
+                if path.exists():
+                    lines = path.read_text(encoding="utf-8").splitlines()
+                    if len(lines) > keep:
+                        path.write_text("\n".join(lines[-keep:]) + "\n", encoding="utf-8")
+            path = sdir / "equity.csv"
             if path.exists():
                 lines = path.read_text(encoding="utf-8").splitlines()
-                if len(lines) > keep:
-                    path.write_text("\n".join(lines[-keep:]) + "\n", encoding="utf-8")
-        path = self.dir / "equity.csv"
-        if path.exists():
-            lines = path.read_text(encoding="utf-8").splitlines()
-            if len(lines) > MAX_EQUITY_ROWS + 1:
-                path.write_text("\n".join([lines[0]] + lines[-MAX_EQUITY_ROWS:]) + "\n", encoding="utf-8")
+                if len(lines) > MAX_EQUITY_ROWS + 1:
+                    path.write_text("\n".join([lines[0]] + lines[-MAX_EQUITY_ROWS:]) + "\n", encoding="utf-8")
