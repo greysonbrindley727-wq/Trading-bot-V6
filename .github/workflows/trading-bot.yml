@@ -1,3 +1,4 @@
+# File version: 7.0.0
 name: Trading Bot
 
 on:
@@ -30,10 +31,20 @@ jobs:
 
       - run: pip install -r requirements.txt
 
+      # One job runs every strategy. Each strategy trades its own Alpaca paper
+      # account, so each has its own pair of keys. A strategy whose keys are
+      # missing is skipped and shown as "not set up" on the dashboard.
       - run: python bot.py
         env:
+          # RSI Reversion
           APCA_API_KEY_ID: ${{ secrets.APCA_API_KEY_ID }}
           APCA_API_SECRET_KEY: ${{ secrets.APCA_API_SECRET_KEY }}
+          # Opening Range Breakout
+          APCA_API_KEY_ID_ORB: ${{ secrets.APCA_API_KEY_ID_ORB }}
+          APCA_API_SECRET_KEY_ORB: ${{ secrets.APCA_API_SECRET_KEY_ORB }}
+          # RSI(2) Pullback
+          APCA_API_KEY_ID_RSI2: ${{ secrets.APCA_API_KEY_ID_RSI2 }}
+          APCA_API_SECRET_KEY_RSI2: ${{ secrets.APCA_API_SECRET_KEY_RSI2 }}
           NOTIFY_WEBHOOK_URL: ${{ secrets.NOTIFY_WEBHOOK_URL }}
           # Dashboard data is published to this branch (see publisher.py).
           DASHBOARD_BRANCH: dashboard-data
