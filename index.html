@@ -1,4 +1,5 @@
 <!doctype html>
+<!-- File version: 2.0.0 -->
 <html lang="en">
 <head>
 <meta charset="utf-8">
@@ -26,6 +27,7 @@
   --accent: #2a78d6;
   --long: #2a78d6;
   --short: #eb6834;
+  --s1: #2a78d6; --s2: #eb6834; --s3: #1baf7a; --s4: #eda100; --s5: #e87ba4; --s6: #008300; --s7: #4a3aa7; --s8: #e34948;
   --gain: #0ca30c;
   --gain-text: #006300;
   --loss: #d03b3b;
@@ -49,6 +51,7 @@
     --accent: #3987e5;
     --long: #3987e5;
     --short: #d95926;
+    --s1: #3987e5; --s2: #d95926; --s3: #199e70; --s4: #c98500; --s5: #d55181; --s6: #008300; --s7: #9085e9; --s8: #e66767;
     --gain: #0ca30c;
     --gain-text: #0ca30c;
     --loss: #e66767;
@@ -69,6 +72,7 @@
   --accent: #3987e5;
   --long: #3987e5;
   --short: #d95926;
+  --s1: #3987e5; --s2: #d95926; --s3: #199e70; --s4: #c98500; --s5: #d55181; --s6: #008300; --s7: #9085e9; --s8: #e66767;
   --gain: #0ca30c;
   --gain-text: #0ca30c;
   --loss: #e66767;
@@ -98,10 +102,7 @@ button, select { font: inherit; color: inherit; }
 .loss { color: var(--loss-text); }
 
 /* ---- header ---- */
-.top {
-  position: sticky; top: env(safe-area-inset-top, 0px); z-index: 20;
-  background: var(--page); border-bottom: 1px solid var(--grid);
-}
+.top { background: var(--page); border-bottom: 1px solid var(--grid); }
 .top-in {
   max-width: 1180px; margin: 0 auto; padding: 10px 16px;
   display: flex; flex-wrap: wrap; align-items: center; gap: 10px 14px;
@@ -248,15 +249,66 @@ table.t tbody tr:last-child td { border-bottom: 0; }
 .foot a { color: var(--ink-2); }
 .loading { opacity: 0.6; transition: opacity 0.15s; }
 @media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
+
+/* ---- strategy switcher ---- */
+.viewbar {
+  position: sticky; top: env(safe-area-inset-top, 0px); z-index: 20;
+  background: var(--page); border-bottom: 1px solid var(--grid);
+}
+.viewbar-in { max-width: 1180px; margin: 0 auto; padding: 8px 16px; display: flex; align-items: center; gap: 12px; }
+.views { display: flex; gap: 6px; overflow-x: auto; flex: 1 1 auto; min-width: 0; padding: 2px 0; scrollbar-width: thin; }
+.views button {
+  display: inline-flex; align-items: center; gap: 8px; flex: none; white-space: nowrap; min-height: 34px;
+  background: var(--surface); border: 1px solid var(--border); border-radius: 999px; padding: 5px 14px; cursor: pointer;
+}
+.views button:hover { background: var(--raised); }
+.views button[aria-selected="true"] { border-color: var(--ink); background: var(--raised); font-weight: 500; }
+.viewbar-in #health { flex: none; }
+.swatch { display: inline-block; flex: none; width: 18px; height: 3px; border-radius: 2px; background: var(--c, var(--accent)); }
+.swatch.dot { width: 10px; height: 10px; border-radius: 50%; }
+.topbar { background: var(--page); }
+@media (max-width: 560px) { .viewbar-in #health { display: none; } }
+
+/* ---- compare view ---- */
+.legend { display: flex; flex-wrap: wrap; gap: 6px 20px; margin-bottom: 10px; }
+.legend-item { display: inline-flex; align-items: center; gap: 8px; font-size: 13px; }
+.legend-item b { font-weight: 600; font-variant-numeric: tabular-nums; }
+svg .cl { fill: none; stroke-width: 2; stroke-linejoin: round; stroke-linecap: round; }
+svg .cdot { stroke: var(--surface); stroke-width: 2; }
+svg .endnum { fill: var(--ink); font-size: 12px; font-weight: 600; font-family: var(--font); }
+.tip-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; font-size: 12px; margin-top: 4px; white-space: nowrap; }
+.tip-row .nm { display: inline-flex; align-items: center; gap: 6px; color: var(--ink-2); }
+.tip-row .vv { font-weight: 600; font-variant-numeric: tabular-nums; }
+.scards { display: grid; gap: 16px; grid-template-columns: repeat(auto-fit, minmax(min(100%, 300px), 1fr)); }
+.scard { border: 1px solid var(--border); border-radius: 8px; padding: 14px; background: var(--surface); min-width: 0; display: flex; flex-direction: column; gap: 10px; }
+.scard-top { display: flex; align-items: center; justify-content: space-between; gap: 8px; flex-wrap: wrap; }
+.scard h3 { display: flex; align-items: center; gap: 8px; }
+.scard .nums { display: grid; grid-template-columns: 1fr 1fr; gap: 8px 12px; }
+.scard .nums .v { font-size: 16px; }
+.scard .sched { color: var(--ink-2); font-size: 12px; }
+table.cmp { max-width: 860px; }
+
+.cmp th.colh { text-align: right; vertical-align: bottom; white-space: normal; min-width: 92px; }
+.cmp th.colh .swatch { display: block; margin: 0 0 5px auto; }
+.cmp td.rowh { color: var(--ink-2); white-space: normal; min-width: 96px; }
+.cmp td.rowh .hint { display: block; color: var(--ink-3); font-size: 11px; }
+.cmp td.na { color: var(--ink-3); }
+.setup-steps { margin: 8px 0 0; padding-left: 20px; color: var(--ink-2); }
+.setup-steps li { margin: 4px 0; }
+.code { font-family: var(--mono); font-size: 12px; background: var(--raised); border-radius: 4px; padding: 1px 6px; white-space: nowrap; }
+@media (max-width: 560px) {
+  table.cmp { font-size: 12px; }
+  .cmp th.colh, .cmp td.rowh { min-width: 0; }
+  .cmp td.rowh .hint { display: none; }
+  table.t.cmp th, table.t.cmp td { padding-right: 6px; }
+}
 </style>
 </head>
 <body>
 <header class="top">
   <div class="top-in">
-    <div class="brand"><h1>Trading Bot</h1><span class="sub" id="brand-sub">Paper account</span></div>
+    <div class="brand"><h1>Trading Bot</h1><span class="sub" id="brand-sub">Paper accounts</span></div>
     <div class="controls">
-      <label class="sel" id="sel-wrap" hidden><span class="sr">Strategy</span><select id="strategy"></select></label>
-      <span id="health"></span>
       <span class="upd" id="updated"></span>
       <button class="btn" id="refresh" type="button">Refresh</button>
       <button class="btn" id="auto" type="button" aria-pressed="true">Auto-refresh on</button>
@@ -265,6 +317,12 @@ table.t tbody tr:last-child td { border-bottom: 0; }
     </div>
   </div>
 </header>
+<nav class="viewbar" aria-label="Strategy view">
+  <div class="viewbar-in">
+    <div class="views" id="views" role="tablist"></div>
+    <span id="health"></span>
+  </div>
+</nav>
 <main class="wrap" id="app"><p class="empty">Loading…</p></main>
 <noscript><p class="empty">This dashboard needs JavaScript.</p></noscript>
 
@@ -275,7 +333,7 @@ table.t tbody tr:last-child td { border-bottom: 0; }
 /* ======================= configuration ======================= */
 const CONFIG = {
   owner: "greysonbrindley727-wq",
-  repo: "Trading-bot",
+  repo: "Trading-bot-V6",
   dataBranch: "dashboard-data",   // where the bot publishes its data files
   mainBranch: "main",             // where tuning_log.csv lives
   refreshSeconds: 60,
@@ -347,6 +405,11 @@ function ago(ms) {
   return Math.round(s / 86400) + " d ago";
 }
 
+// Drop x-axis labels that would sit closer together than a label is wide.
+function spaced(ticks, X, minGap) {
+  let lastX = -Infinity;
+  return ticks.filter((t) => { const x = X(t.i); if (x - lastX >= minGap) { lastX = x; return true; } return false; });
+}
 function niceTicks(min, max, count) {
   if (!(max > min)) { const pad = Math.abs(min) * 0.001 || 1; min -= pad; max += pad; }
   const raw = (max - min) / count, pow = Math.pow(10, Math.floor(Math.log10(raw))), f = raw / pow;
@@ -388,21 +451,36 @@ async function getText(url) {
 }
 const getJSON = async (url) => JSON.parse(await getText(url));
 
+// The page shows several strategies. Each has its own folder of files in the data branch:
+// status.json, equity.csv, trades.jsonl, and (only for the strategy being viewed in detail)
+// decisions.jsonl and orders.jsonl, which are the large ones.
+const emptyStatus = (meta, message) => ({
+  schema: 2, updated_at: new Date().toISOString(), strategy: meta,
+  bot: { state: "idle", message: message || "No data yet.", passes: 0 },
+  market: {}, account: {}, positions: [], open_orders: [], recent_orders: [], tuning: null,
+});
+
 async function loadLive() {
   const idx = await getJSON(DATA_BASE + "/strategies.json");
   const list = idx.strategies || [];
   if (!list.length) throw new Error("strategies.json has no strategies yet");
-  const id = list.some((s) => s.id === ui.strategy) ? ui.strategy : list[0].id;
-  ui.strategy = id;
-  const base = DATA_BASE + "/" + encodeURIComponent(id);
-  const [status, equity, decisions, orders, tuning] = await Promise.all([
-    getJSON(base + "/status.json"),
-    getText(base + "/equity.csv").then(parseEquity).catch(() => []),
-    getText(base + "/decisions.jsonl").then(parseJSONL).catch(() => []),
-    getText(base + "/orders.jsonl").then(parseJSONL).catch(() => []),
-    getText(MAIN_BASE + "/tuning_log.csv").then(parseCSV).catch(() => []),
-  ]);
-  return { strategies: list, status, equity, decisions, orders, tuning, demo: false, loadedAt: Date.now() };
+  if (ui.view === "compare" ? list.length < 2 : !list.some((s) => s.id === ui.view)) ui.view = list.length > 1 ? "compare" : list[0].id;
+  const byId = {};
+  await Promise.all(list.map(async (meta) => {
+    const base = DATA_BASE + "/" + encodeURIComponent(meta.id);
+    const detail = ui.view === meta.id, on = meta.configured !== false;   // a strategy with no keys has only a status file
+    const [status, equity, trades, decisions, orders] = await Promise.all([
+      getJSON(base + "/status.json").catch((e) => { if (detail) throw e; return null; }),
+      on ? getText(base + "/equity.csv").then(parseEquity).catch(() => []) : [],
+      on ? getText(base + "/trades.jsonl").then(parseJSONL).catch(() => []) : [],
+      on && detail ? getText(base + "/decisions.jsonl").then(parseJSONL).catch(() => []) : [],
+      on && detail ? getText(base + "/orders.jsonl").then(parseJSONL).catch(() => []) : [],
+    ]);
+    byId[meta.id] = { meta, status: status || emptyStatus(meta, "This strategy has not published anything yet."), equity, trades: trades.sort((a, b) => Date.parse(a.t) - Date.parse(b.t)), decisions, orders, demo: false, tuning: [] };
+  }));
+  const tuning = await getText(MAIN_BASE + "/tuning_log.csv").then(parseCSV).catch(() => []);
+  if (byId["rsi-reversion"]) byId["rsi-reversion"].tuning = tuning;
+  return { strategies: list, byId, demo: false, loadedAt: Date.now() };
 }
 
 /* ======================= sample data ======================= */
@@ -421,11 +499,15 @@ function etToMs(y, mo, d, hh, mm) {
   }
   return guess;
 }
+
+const DEMO_DESC = {"rsi-reversion":{"id":"rsi-reversion","name":"RSI Reversion","description":"Bets that a sharp drop or spike on the 1-minute chart will snap back. It goes long when RSI falls to the oversold level and short when RSI rises to the overbought level. Every entry comes with its own stop-loss and take-profit, which Alpaca manages.","kind":"intraday","timeframe":"1-minute bars","schedule":"Checks every minute while the market is open.","rules":["Go long when RSI(14) falls to 30 or lower.","Go short when RSI(14) rises to 70 or higher.","Each entry gets a stop-loss 0.40% away and a take-profit 0.80% away.","Only one position per stock at a time. The stop-loss or take-profit closes it."],"params":[{"key":"rsi_period","label":"RSI period","display":"14 bars","hint":"How many 1-minute bars RSI looks back over"},{"key":"rsi_oversold","label":"Oversold level","display":"30","hint":"RSI at or below this triggers a long"},{"key":"rsi_overbought","label":"Overbought level","display":"70","hint":"RSI at or above this triggers a short"},{"key":"stop_loss_pct","label":"Stop-loss","display":"0.40%","hint":"Distance from entry where the position is closed at a loss"},{"key":"take_profit_pct","label":"Take-profit","display":"0.80%","hint":"Distance from entry where the position is closed at a gain"}],"indicators":[{"key":"rsi","label":"RSI (14)","decimals":1,"range":[0,100],"zone":"outside","spark":true,"marks":[{"value":30,"label":"Oversold"},{"value":70,"label":"Overbought"}]}],"symbols":["AAPL","MSFT","SPY","QQQ","NVDA","TSLA","AMD","PLTR"],"configured":true,"settings":[{"label":"Max daily loss","display":"3.0%","hint":"New trades stop for the day if the account falls this far"},{"label":"Check interval","display":"60 sec","hint":"How often the bot looks at the market"},{"label":"Position size","display":"12.5% of the account","hint":"Per stock, rounded down to whole shares"},{"label":"Cooldown","display":"5 min","hint":"Minimum gap between order attempts in one stock"}]},"orb":{"id":"orb","name":"Opening Range Breakout","description":"Looks at the first 5-minute candle of the day. If it closed up, the bot goes long; if it closed down, it goes short. The stop-loss sits at the other end of that candle, and everything is closed shortly before the market closes. It only trades stocks whose opening volume is at least normal, because the idea works best on busy days.","kind":"intraday","timeframe":"5-minute bars","schedule":"Looks at the first candle at 9:35 AM ET, may enter until 9:50 AM ET, and closes everything 5 minutes before the close.","rules":["If the first 5-minute candle (9:30 to 9:35 AM ET) closed up, go long. If it closed down, go short.","Only trade a stock when its opening volume is at least 1.0x its recent average.","The stop-loss goes at the low (long) or high (short) of that first candle.","The take-profit is 10 times the risk away, so most trades end at the close instead.","Close every position 5 minutes before the market closes. One trade per stock per day."],"params":[{"key":"min_rel_volume","label":"Minimum opening volume","display":"1.0x","hint":"Compared with the average opening volume of recent sessions"},{"key":"rel_volume_days","label":"Average over","display":"14 sessions","hint":"How many past days make up the volume average"},{"key":"entry_window_minutes","label":"Entry window","display":"15 min","hint":"How long after the first candle the bot may still enter"},{"key":"target_r","label":"Take-profit","display":"10x the risk","hint":"Distance of the profit target, as a multiple of the stop distance"},{"key":"risk_per_trade_pct","label":"Risk per trade","display":"0.50%","hint":"Share of the account lost if the stop-loss is hit"}],"indicators":[{"key":"rel_vol","label":"Opening volume vs average","decimals":2,"range":[0,3],"zone":"above","marks":[{"value":1.0,"label":"Minimum"}]},{"key":"range_pct","label":"Opening candle size (% of price)","decimals":2,"range":[0,2],"zone":"between","marks":[{"value":0.05,"label":"Min"},{"value":1.5,"label":"Max"}]}],"symbols":["AAPL","MSFT","SPY","QQQ","NVDA","TSLA","AMD","PLTR"],"configured":true,"settings":[{"label":"Max daily loss","display":"3.0%","hint":"New trades stop for the day if the account falls this far"},{"label":"Check interval","display":"60 sec","hint":"How often the bot looks at the market"},{"label":"Risk per trade","display":"0.50% of the account","hint":"How much the account loses if the stop-loss is hit"},{"label":"Largest position","display":"25% of the account","hint":"Caps the size when the stop is very close"},{"label":"Entry window","display":"9:35 AM to 9:50 AM ET","hint":"The bot only enters during this time"},{"label":"Closes everything","display":"5 min before the close","hint":"No positions are held overnight"}]},"rsi2-swing":{"id":"rsi2-swing","name":"RSI(2) Pullback","description":"Buys short, sharp dips in stocks that are in a longer uptrend. When a stock closes far below where it was two days ago while still trading above its 200-day average, the bot buys it and sells once the price recovers above its 5-day average. Trades last a few days.","kind":"swing","timeframe":"Daily bars","schedule":"Checks once near the close each day (last 15 minutes). Long only.","rules":["Buy when the price is above its 200-day average and RSI(2) closes below 10.","Sell when the price closes above its 5-day average.","Sell anyway after 7 trading days.","A wide safety stop-loss (8% away) and take-profit (20% away) protect against a crash.","Long only. One position per stock. Trades are rare, a few a month across the watchlist."],"params":[{"key":"rsi_period","label":"RSI period","display":"2 days","hint":"A very short RSI that reacts to a 2-day drop"},{"key":"entry_rsi","label":"Buy when RSI below","display":"10","hint":"How sharp the dip has to be"},{"key":"trend_sma","label":"Uptrend filter","display":"200-day average","hint":"Only buy dips in stocks trading above this"},{"key":"exit_sma","label":"Sell above","display":"5-day average","hint":"Sell when the price closes above this"},{"key":"max_hold_days","label":"Longest hold","display":"7 days","hint":"Time limit if the price never recovers"},{"key":"stop_loss_pct","label":"Safety stop-loss","display":"8%","hint":"Only for disasters"}],"indicators":[{"key":"rsi2","label":"RSI (2)","decimals":1,"range":[0,100],"zone":"below","marks":[{"value":10,"label":"Buy below"}]},{"key":"vs_sma200","label":"Price vs 200-day average (%)","decimals":1,"range":[-20,20],"zone":"above","marks":[{"value":0,"label":"Uptrend above"}]}],"symbols":["AAPL","MSFT","SPY","QQQ","NVDA","TSLA","AMD","PLTR"],"configured":true,"settings":[{"label":"Max daily loss","display":"3.0%","hint":"New trades stop for the day if the account falls this far"},{"label":"Check interval","display":"60 sec","hint":"How often the bot looks at the market"},{"label":"Position size","display":"12.5% of the account","hint":"Per stock, rounded down to whole shares"},{"label":"Order window","display":"Last 15 min of the day","hint":"Buys and sells happen shortly before the close, using the day's price so far"},{"label":"Longest hold","display":"7 trading days","hint":"The bot sells after this long even if the price has not recovered"}]}};
+const DEMO_PRICE = { AAPL: 232.4, MSFT: 421.8, SPY: 571.2, QQQ: 489.6, NVDA: 134.2, TSLA: 249.8, AMD: 164.3, PLTR: 38.9 };
+
 function makeDemo() {
   const rnd = mulberry32(20261001);
   const gauss = () => { let u = 0, v = 0; while (!u) u = rnd(); while (!v) v = rnd(); return Math.sqrt(-2 * Math.log(u)) * Math.cos(2 * Math.PI * v); };
-  const now = Date.now();
-  const np = etParts(now);
+  const now = Date.now(), np = etParts(now), r2 = (x) => Math.round(x * 100) / 100, iso = (ms) => new Date(ms).toISOString();
+  const syms = Object.keys(DEMO_PRICE), notSet = params.get("demo") === "notset";
 
   // the last 10 weekdays (today included once the session has opened)
   const days = [];
@@ -436,157 +518,221 @@ function makeDemo() {
     if (cursor.getUTCDay() !== 0 && cursor.getUTCDay() !== 6) days.unshift({ y: cursor.getUTCFullYear(), mo: cursor.getUTCMonth() + 1, d: cursor.getUTCDate() });
     cursor.setUTCDate(cursor.getUTCDate() - 1);
   }
+  const lastIdx = days.length - 1;
+  const at = (back, hh, mm) => { const d = days[Math.max(0, lastIdx - back)]; return etToMs(d.y, d.mo, d.d, hh, mm); };
+  let openNow = false;
 
-  const equity = [];
-  let eq = 100000, prevClose = 100000, openNow = false;
-  days.forEach((day, di) => {
-    const open = etToMs(day.y, day.mo, day.d, 9, 30);
-    if (di > 0) prevClose = equity[equity.length - 1].v;
-    for (let k = 0; k <= 78; k++) {
-      const t = open + k * 300000;
-      if (t > now) { openNow = true; break; }
-      eq += 1.4 + gauss() * 36;
-      equity.push({ t, v: Math.round(eq * 100) / 100 });
+  // an account curve: starts at $100,000 on its first day, then wanders with a small upward drift
+  function genEquity(firstDay, drift, vol) {
+    const pts = [];
+    let eq = 100000, stop = false;
+    for (let di = firstDay; di < days.length && !stop; di++) {
+      const open = at(lastIdx - di, 9, 30);
+      for (let k = 0; k <= 78; k++) {
+        const t = open + k * 300000;
+        if (t > now) { openNow = true; stop = true; break; }
+        if (!(di === firstDay && k === 0)) eq += drift + gauss() * vol;
+        pts.push({ t, v: r2(eq) });
+      }
     }
-  });
-  const last = equity[equity.length - 1];
-  const anchor = last.t;
-  const todayStart = equity.findIndex((p) => etKey(p.t) === etKey(last.t));
-  prevClose = todayStart > 0 ? equity[todayStart - 1].v : 100000;
-
-  // three symbols: price, RSI that ends at a chosen reading, and what the bot did
-  const spec = {
-    AAPL: { price: 232.4, rsi: 26.8, qty: 143, dir: "long" },
-    MSFT: { price: 421.8, rsi: 52.3 },
-    SPY: { price: 571.2, rsi: 71.4, qty: 58, dir: "short" },
-  };
-  const decisions = [], orders = [], recent = [], positions = [], openOrders = [];
-  const N = 90, low = 30, high = 70;
+    return pts;
+  }
+  const curves = { "rsi-reversion": genEquity(0, 1.4, 36), orb: genEquity(4, 2.2, 30), "rsi2-swing": genEquity(4, 1.1, 13) };
+  const anchor = curves["rsi-reversion"][curves["rsi-reversion"].length - 1].t;
   let oid = 1;
   const newId = () => "demo-" + String(oid++).padStart(4, "0");
 
-  for (const [sym, sp] of Object.entries(spec)) {
-    let r = 50, p = sp.price * (1 + gauss() * 0.002);
-    const rs = [], ps = [];
-    for (let i = 0; i < N; i++) {
-      r += (50 - r) * 0.12 + gauss() * 5.5;
-      r = Math.max(34, Math.min(66, r));
-      p *= 1 + gauss() * 0.00035;
-      rs.push(r); ps.push(p);
+  // building blocks shared by the three strategies
+  function newBook() { return { decisions: [], orders: [], recent: [], positions: [], openOrders: [], trades: [] }; }
+  function addEntry(B, o) {
+    const sgn = o.dir === "long" ? 1 : -1, stop = r2(o.px * (1 - sgn * o.stopPct)), tgt = r2(o.px * (1 + sgn * o.tpPct)), id = newId();
+    B.orders.push({ t: iso(o.t), symbol: o.sym, direction: o.dir, kind: "entry", side: sgn > 0 ? "buy" : "sell", qty: o.qty, ref_price: o.px, reason: o.reason, stop_price: stop, take_profit_price: tgt, status: "submitted", order_id: id, alpaca_status: o.open ? "accepted" : "filled" });
+    B.recent.push({ id, symbol: o.sym, side: sgn > 0 ? "buy" : "sell", qty: o.qty, filled_qty: o.qty, type: "market", order_class: "bracket", status: "filled", limit_price: null, stop_price: null, filled_avg_price: o.px, submitted_at: iso(o.t), filled_at: iso(o.t + 1500) });
+    return { stop, tgt, sgn };
+  }
+  function addExit(B, o) {   // a finished trade: how it ended, what it made
+    const sgn = o.dir === "long" ? 1 : -1, pnl = r2(sgn * (o.exit - o.px) * o.qty);
+    B.trades.push({ t: iso(o.tEnd), opened_at: iso(o.t), symbol: o.sym, side: o.dir, qty: o.qty, entry: o.px, exit: o.exit, pnl, pnl_pct: r2(sgn * (o.exit / o.px - 1) * 100), exit_kind: o.kind });
+    const exitSide = sgn > 0 ? "sell" : "buy";
+    if (o.kind === "Stop-loss" || o.kind === "Take-profit") {
+      B.recent.push({ id: newId(), symbol: o.sym, side: exitSide, qty: o.qty, filled_qty: o.qty, type: o.kind === "Stop-loss" ? "stop" : "limit", order_class: "bracket", status: "filled", limit_price: o.kind === "Take-profit" ? o.exit : null, stop_price: o.kind === "Stop-loss" ? o.exit : null, filled_avg_price: o.exit, submitted_at: iso(o.t), filled_at: iso(o.tEnd) });
+    } else {
+      B.orders.push({ t: iso(o.tEnd - 2000), symbol: o.sym, direction: "exit", kind: "exit", side: exitSide, qty: o.qty, ref_price: o.exit, reason: o.why || "The price recovered, so the bot sells.", message: o.why || "", status: "submitted" });
+      B.recent.push({ id: newId(), symbol: o.sym, side: exitSide, qty: o.qty, filled_qty: o.qty, type: "market", order_class: "simple", status: "filled", limit_price: null, stop_price: null, filled_avg_price: o.exit, submitted_at: iso(o.tEnd - 2000), filled_at: iso(o.tEnd) });
     }
-    for (let j = 0; j < 12; j++) { const w = (j + 1) / 12, i = N - 12 + j; rs[i] = rs[i] * (1 - w) + sp.rsi * w; }
-    ps[N - 1] = sp.price;
-    let held = false;
-    for (let i = 0; i < N; i++) {
-      const t = anchor - (N - 1 - i) * 60000;
-      const rsi = Math.round(rs[i] * 100) / 100;
-      const signal = rsi <= low ? "long" : rsi >= high ? "short" : "none";
-      const checks = [
-        { label: "RSI at or below " + low + " (oversold)", ok: rsi <= low },
-        { label: "RSI at or above " + high + " (overbought)", ok: rsi >= high },
-      ];
-      let action = "none", detail = null;
-      const reason = signal === "long" ? "RSI " + rsi.toFixed(1) + " is at or below " + low + ". The price looks oversold, so the bot looks for a bounce (long)."
-        : signal === "short" ? "RSI " + rsi.toFixed(1) + " is at or above " + high + ". The price looks overbought, so the bot looks for a pullback (short)."
-        : "RSI " + rsi.toFixed(1) + " is between " + low + " and " + high + ". No signal.";
-      if (signal !== "none") {
-        if (!held && sp.dir === signal) {
-          held = true; action = "order_submitted"; detail = "Bracket order sent for " + sp.qty + " shares.";
-          checks.push({ label: "No open position or pending order", ok: true });
-          const px = Math.round(ps[i] * 100) / 100, sgn = signal === "long" ? 1 : -1;
-          const stop = Math.round(px * (1 - sgn * 0.004) * 100) / 100, tgt = Math.round(px * (1 + sgn * 0.008) * 100) / 100;
-          const id = newId();
-          orders.push({ t: new Date(t).toISOString(), symbol: sym, direction: signal, side: signal === "long" ? "buy" : "sell", qty: sp.qty, ref_price: px, reason, stop_price: stop, take_profit_price: tgt, status: "submitted", order_id: id, alpaca_status: "accepted" });
-          recent.push({ id, symbol: sym, side: signal === "long" ? "buy" : "sell", qty: sp.qty, filled_qty: sp.qty, type: "market", order_class: "bracket", status: "filled", limit_price: null, stop_price: null, filled_avg_price: px, submitted_at: new Date(t).toISOString(), filled_at: new Date(t + 1500).toISOString() });
-          const exitSide = signal === "long" ? "sell" : "buy";
-          openOrders.push({ id: newId(), symbol: sym, side: exitSide, qty: sp.qty, filled_qty: 0, type: "stop", order_class: "bracket", status: "held", limit_price: null, stop_price: stop, filled_avg_price: null, submitted_at: new Date(t).toISOString(), filled_at: null });
-          openOrders.push({ id: newId(), symbol: sym, side: exitSide, qty: sp.qty, filled_qty: 0, type: "limit", order_class: "bracket", status: "new", limit_price: tgt, stop_price: null, filled_avg_price: null, submitted_at: new Date(t).toISOString(), filled_at: null });
-          const cur = sp.price;
-          positions.push({ symbol: sym, side: signal, qty: sp.qty, avg_entry_price: px, current_price: cur, market_value: (signal === "long" ? 1 : -1) * sp.qty * cur, unrealized_pl: sgn * (cur - px) * sp.qty, unrealized_plpc: sgn * (cur - px) / px });
-        } else if (held) {
-          checks.push({ label: "Already holding a position in this symbol", ok: false });
-          action = "skipped"; detail = "Already holding a position in this symbol";
+  }
+  function addHolding(B, o, cur) {   // an open position plus its waiting stop-loss and take-profit
+    const { stop, tgt, sgn } = o.levels, exitSide = sgn > 0 ? "sell" : "buy";
+    B.openOrders.push({ id: newId(), symbol: o.sym, side: exitSide, qty: o.qty, filled_qty: 0, type: "stop", order_class: "bracket", status: "held", limit_price: null, stop_price: stop, filled_avg_price: null, submitted_at: iso(o.t), filled_at: null });
+    B.openOrders.push({ id: newId(), symbol: o.sym, side: exitSide, qty: o.qty, filled_qty: 0, type: "limit", order_class: "bracket", status: "new", limit_price: tgt, stop_price: null, filled_avg_price: null, submitted_at: iso(o.t), filled_at: null });
+    B.positions.push({ symbol: o.sym, side: o.dir, qty: o.qty, avg_entry_price: o.px, current_price: cur, market_value: sgn * o.qty * cur, unrealized_pl: r2(sgn * (cur - o.px) * o.qty), unrealized_plpc: sgn * (cur - o.px) / o.px });
+  }
+  const dec = (B, t, sym, price, indicators, signal, reason, checks, action, detail) =>
+    B.decisions.push({ t: iso(t), symbol: sym, price: r2(price), indicators, signal, reason, checks, action: action || "none", detail: detail || null });
+
+  /* ---------- 1. RSI Reversion: one reading a minute, small stop and target ---------- */
+  const R = newBook();
+  {
+    const spec = {
+      AAPL: { rsi: 26.8, qty: 53, dir: "long" }, MSFT: { rsi: 52.3 }, SPY: { rsi: 71.4, qty: 21, dir: "short" }, QQQ: { rsi: 44.1 },
+      NVDA: { rsi: 61.5 }, TSLA: { rsi: 33.2 }, AMD: { rsi: 48.7 }, PLTR: { rsi: 55.9 },
+    };
+    const N = 90, low = 30, high = 70;
+    for (const [sym, sp] of Object.entries(spec)) {
+      let rr = 50, p = DEMO_PRICE[sym] * (1 + gauss() * 0.002);
+      const rs = [], ps = [];
+      for (let i = 0; i < N; i++) { rr += (50 - rr) * 0.12 + gauss() * 5.5; rr = Math.max(34, Math.min(66, rr)); p *= 1 + gauss() * 0.00035; rs.push(rr); ps.push(p); }
+      for (let j = 0; j < 12; j++) { const w = (j + 1) / 12, i = N - 12 + j; rs[i] = rs[i] * (1 - w) + sp.rsi * w; }
+      ps[N - 1] = DEMO_PRICE[sym];
+      let held = false;
+      for (let i = 0; i < N; i++) {
+        const t = anchor - (N - 1 - i) * 60000, rsi = r2(rs[i]);
+        const signal = rsi <= low ? "long" : rsi >= high ? "short" : "none";
+        const checks = [{ label: "RSI at or below " + low + " (oversold)", ok: rsi <= low }, { label: "RSI at or above " + high + " (overbought)", ok: rsi >= high }];
+        const reason = signal === "long" ? "RSI " + rsi.toFixed(1) + " is at or below " + low + ". The price looks oversold, so the bot looks for a bounce (long)."
+          : signal === "short" ? "RSI " + rsi.toFixed(1) + " is at or above " + high + ". The price looks overbought, so the bot looks for a pullback (short)."
+          : "RSI " + rsi.toFixed(1) + " is between " + low + " and " + high + ". No signal.";
+        let action = "none", detail = null;
+        if (signal !== "none") {
+          if (!held && sp.dir === signal) {
+            held = true; action = "order_submitted"; detail = "Bracket order sent for " + sp.qty + " shares.";
+            checks.push({ label: "No open position or pending order", ok: true });
+            const o = { t, sym, dir: signal, px: r2(ps[i]), qty: sp.qty, reason, stopPct: 0.004, tpPct: 0.008 };
+            o.levels = addEntry(R, { ...o, open: true });
+            addHolding(R, o, DEMO_PRICE[sym]);
+          } else if (held) { checks.push({ label: "Already holding a position in this stock", ok: false }); action = "skipped"; detail = "Already holding a position in this stock"; }
         }
+        dec(R, t, sym, ps[i], { rsi }, signal, reason, checks, action, detail);
       }
-      decisions.push({ t: new Date(t).toISOString(), symbol: sym, price: Math.round(ps[i] * 100) / 100, indicators: { rsi }, signal, reason, checks, action, detail });
+    }
+    const past = [
+      [2, "SPY", "long", true, 10, 41], [3, "AAPL", "short", false, 11, 18], [4, "MSFT", "short", null, 13, 5, "reject"], [5, "MSFT", "long", true, 14, 52],
+      [6, "AAPL", "long", true, 9, 48], [7, "SPY", "short", false, 15, 12, "small"], [1, "TSLA", "long", false, 11, 3], [1, "NVDA", "short", false, 13, 40],
+      [2, "AMD", "long", false, 10, 15], [3, "QQQ", "long", true, 12, 22], [4, "PLTR", "short", true, 14, 31], [5, "TSLA", "short", false, 10, 5],
+      [6, "NVDA", "long", true, 11, 58], [8, "AMD", "short", true, 9, 52],
+    ];
+    for (const [back, sym, dir, win, hh, mm, flag] of past) {
+      const t = at(back, hh, mm), sgn = dir === "long" ? 1 : -1, px = r2(DEMO_PRICE[sym] * (1 + gauss() * 0.01));
+      const qty = flag === "small" ? 0 : Math.floor(12500 / px);
+      const reason = dir === "long" ? "RSI 27.9 is at or below 30. The price looks oversold, so the bot looks for a bounce (long)." : "RSI 72.6 is at or above 70. The price looks overbought, so the bot looks for a pullback (short).";
+      const stop = r2(px * (1 - sgn * 0.004)), tgt = r2(px * (1 + sgn * 0.008));
+      const base = { t: iso(t), symbol: sym, direction: dir, kind: "entry", side: sgn > 0 ? "buy" : "sell", qty, ref_price: px, reason, stop_price: stop, take_profit_price: tgt };
+      if (flag === "small") { R.orders.push({ ...base, status: "not_placed", message: "The position size rounds down to 0 shares at this price." }); continue; }
+      if (flag === "reject") { R.orders.push({ ...base, status: "rejected", message: "asset " + sym + " cannot be sold short" }); continue; }
+      addEntry(R, { t, sym, dir, px, qty, reason, stopPct: 0.004, tpPct: 0.008 });
+      addExit(R, { t, tEnd: t + 24 * 60000, sym, dir, px, qty, exit: win ? tgt : stop, kind: win ? "Take-profit" : "Stop-loss" });
     }
   }
-  decisions.sort((a, b) => Date.parse(a.t) - Date.parse(b.t));
 
-  // earlier days: a few finished trades, one rejection, one order that could not be sized
-  const past = [
-    { di: 2, sym: "SPY", dir: "long", px: 566.4, win: true, hh: 10, mm: 41 },
-    { di: 3, sym: "AAPL", dir: "short", px: 229.1, win: false, hh: 11, mm: 18 },
-    { di: 4, sym: "MSFT", dir: "short", px: 424.9, win: null, hh: 13, mm: 5, reject: true },
-    { di: 5, sym: "MSFT", dir: "long", px: 418.2, win: true, hh: 14, mm: 52 },
-    { di: 6, sym: "AAPL", dir: "long", px: 227.6, win: true, hh: 9, mm: 48 },
-    { di: 7, sym: "SPY", dir: "short", px: 573.9, win: false, hh: 15, mm: 12, small: true },
-  ];
-  for (const o of past) {
-    const day = days[Math.max(0, days.length - 1 - o.di)];
-    const t = etToMs(day.y, day.mo, day.d, o.hh, o.mm), sgn = o.dir === "long" ? 1 : -1;
-    const stop = Math.round(o.px * (1 - sgn * 0.004) * 100) / 100, tgt = Math.round(o.px * (1 + sgn * 0.008) * 100) / 100;
-    const qty = o.small ? 0 : Math.floor(33333 / o.px);
-    const reason = o.dir === "long" ? "RSI 27.9 is at or below 30. The price looks oversold, so the bot looks for a bounce (long)." : "RSI 72.6 is at or above 70. The price looks overbought, so the bot looks for a pullback (short).";
-    const base = { t: new Date(t).toISOString(), symbol: o.sym, direction: o.dir, side: o.dir === "long" ? "buy" : "sell", qty, ref_price: o.px, reason, stop_price: stop, take_profit_price: tgt };
-    if (o.small) { orders.push({ ...base, status: "not_placed", message: "The position size rounds down to 0 shares at this price." }); continue; }
-    if (o.reject) { orders.push({ ...base, status: "rejected", message: "asset " + o.sym + " cannot be sold short" }); continue; }
-    const id = newId(), exitId = newId();
-    orders.push({ ...base, status: "submitted", order_id: id, alpaca_status: "accepted" });
-    recent.push({ id, symbol: o.sym, side: base.side, qty, filled_qty: qty, type: "market", order_class: "bracket", status: "filled", limit_price: null, stop_price: null, filled_avg_price: o.px, submitted_at: base.t, filled_at: new Date(t + 1800).toISOString() });
-    const exitPx = o.win ? tgt : stop;
-    recent.push({ id: exitId, symbol: o.sym, side: sgn > 0 ? "sell" : "buy", qty, filled_qty: qty, type: o.win ? "limit" : "stop", order_class: "bracket", status: "filled", limit_price: o.win ? tgt : null, stop_price: o.win ? null : stop, filled_avg_price: exitPx, submitted_at: base.t, filled_at: new Date(t + 24 * 60000).toISOString() });
+  /* ---------- 2. Opening Range Breakout: in at 9:35, out before the close ---------- */
+  const O = newBook();
+  {
+    const T = DEMO_DESC.orb;
+    const openT = Math.min(at(0, 9, 35), anchor);
+    const rows = {
+      AAPL: { rv: 1.61, rg: 0.42, sig: "long", hi: 232.9, lo: 231.9 }, MSFT: { rv: 0.4, rg: 0.32, sig: "skipvol" }, SPY: { rv: 0.99, rg: 0.07, sig: "flat" },
+      QQQ: { rv: 1.0, rg: 0.04, sig: "small" }, NVDA: { rv: 1.7, rg: 0.52, sig: "short", hi: 134.9, lo: 134.2 }, TSLA: { rv: 1.3, rg: 1.8, sig: "big" },
+      AMD: { rv: 0.7, rg: 0.3, sig: "skipvol" }, PLTR: { rv: 1.12, rg: 0.31, sig: "none" },
+    };
+    for (const [sym, r] of Object.entries(rows)) {
+      const px = DEMO_PRICE[sym], ind = { rel_vol: r.rv, range_pct: r.rg, opening_high: r.hi || r2(px * 1.002), opening_low: r.lo || r2(px * 0.998) };
+      const volOk = r.rv >= 1, sizeOk = r.rg >= 0.05 && r.rg <= 1.5;
+      const checks = [{ label: "Opening volume at least 1.0x the recent average (" + r.rv.toFixed(2) + "x)", ok: volOk }, { label: "Opening candle between 0.05% and 1.50% of the price", ok: sizeOk }];
+      const why = { long: "The first 5-minute candle closed up on strong volume, so the bot goes long, with its stop at the low of that candle.", short: "The first 5-minute candle closed down on strong volume, so the bot goes short, with its stop at the high of that candle.",
+        skipvol: "Opening volume is only " + r.rv.toFixed(2) + "x the recent average, below the 1.0x needed. Skipping this stock today.", flat: "The first candle closed flat, so there is no direction to follow today.",
+        small: "The opening candle is 0.04% of the price, outside the 0.05% to 1.50% range the bot accepts.", big: "The opening candle is 1.80% of the price, outside the 0.05% to 1.50% range the bot accepts.", none: "The first candle closed flat, so there is no direction to follow today." }[r.sig];
+      const signal = r.sig === "long" || r.sig === "short" ? r.sig : "none";
+      if (signal !== "none") checks.push({ label: "No open position or pending order", ok: true });
+      dec(O, openT, sym, px, ind, signal, why, checks, signal !== "none" ? "order_submitted" : "none", signal !== "none" ? "Bracket order sent." : null);
+    }
+    // today's two trades
+    const aapl = { t: openT, sym: "AAPL", dir: "long", px: 232.4, qty: 62, reason: "The first 5-minute candle closed up on strong volume, so the bot goes long, with its stop at the low of that candle.", stopPct: 0.0043, tpPct: 0.043 };
+    aapl.levels = addEntry(O, { ...aapl, open: openNow });
+    if (openNow) addHolding(O, aapl, 233.1);
+    else addExit(O, { ...aapl, tEnd: at(0, 15, 55), exit: 234.05, kind: "Market exit", why: "End of day: close everything" });
+    const nvda = { t: openT, sym: "NVDA", dir: "short", px: 134.2, qty: 120, reason: "The first 5-minute candle closed down on strong volume, so the bot goes short, with its stop at the high of that candle.", stopPct: 0.0052, tpPct: 0.052 };
+    addEntry(O, { ...nvda, open: false });
+    addExit(O, { ...nvda, tEnd: Math.min(at(0, 10, 12), anchor), exit: r2(134.2 * 1.0052), kind: "Stop-loss" });
+    // earlier days, all closed out before the close
+    const hist = [[1, "TSLA", "long", 249.1, 40, "Market exit", 1.3], [1, "MSFT", "short", 424.9, 29, "Stop-loss", -1], [2, "NVDA", "long", 131.6, 94, "Market exit", 0.7], [2, "AMD", "short", 168.2, 74, "Market exit", 1.1],
+      [3, "SPY", "long", 566.4, 22, "Stop-loss", -1], [3, "PLTR", "long", 37.1, 330, "Market exit", -0.4], [4, "QQQ", "short", 492.5, 25, "Market exit", 0.9], [4, "AAPL", "long", 227.6, 54, "Stop-loss", -1], [5, "TSLA", "short", 252.8, 39, "Market exit", 1.6]];
+    for (const [back, sym, dir, px, qty, kind, rmult] of hist) {
+      if (lastIdx - back < 4) continue;   // this strategy only has data from the 5th day on
+      const t = at(back, 9, 35), sgn = dir === "long" ? 1 : -1, risk = r2(px * 0.0045);
+      const levels = addEntry(O, { t, sym, dir, px, qty, reason: "The first 5-minute candle closed " + (dir === "long" ? "up" : "down") + " on strong volume, so the bot goes " + dir + ", with its stop at the " + (dir === "long" ? "low" : "high") + " of that candle.", stopPct: 0.0045, tpPct: 0.045 });
+      addExit(O, { t, tEnd: kind === "Stop-loss" ? t + 47 * 60000 : at(back, 15, 55), sym, dir, px, qty, exit: kind === "Stop-loss" ? levels.stop : r2(px + sgn * risk * rmult), kind, why: "End of day: close everything" });
+    }
+    O.desc = T;
   }
-  orders.sort((a, b) => Date.parse(a.t) - Date.parse(b.t));
-  recent.sort((a, b) => Date.parse(b.filled_at || b.submitted_at) - Date.parse(a.filled_at || a.submitted_at));
 
-  const gross = positions.reduce((s, p) => s + Math.abs(p.market_value), 0);
-  const lastTuned = etToMs(days[days.length - 1].y, days[days.length - 1].mo, days[days.length - 1].d, 17, 0) - (openNow ? 86400000 : 0);
-  const rows = [];
-  [["AAPL", 14, 30, 70, 0.004, 0.008, 0.62, 41], ["MSFT", 21, 25, 75, 0.003, 0.006, 0.31, 28], ["SPY", 14, 30, 70, 0.004, 0.008, 0.44, 36],
-   ["AAPL", 14, 35, 65, 0.004, 0.008, 0.55, 52], ["MSFT", 10, 30, 70, 0.006, 0.012, 0.27, 33], ["SPY", 21, 30, 70, 0.003, 0.006, 0.38, 24]].forEach((r, i) => {
-    rows.push({ date: fKey.format(lastTuned - (1 + Math.floor(i / 3)) * 86400000), symbol: r[0], rsi_period: r[1], rsi_oversold: r[2], rsi_overbought: r[3], stop_loss_pct: r[4], take_profit_pct: r[5], return_pct: (r[6] / 100).toFixed(4), num_trades: r[7] });
-  });
-  rows.unshift(...[["AAPL", 14, 30, 70, 0.004, 0.008, 0.71, 44], ["MSFT", 14, 30, 70, 0.004, 0.008, 0.33, 31], ["SPY", 14, 30, 70, 0.004, 0.008, 0.52, 39]].map((r) => ({
-    date: fKey.format(lastTuned), symbol: r[0], rsi_period: r[1], rsi_oversold: r[2], rsi_overbought: r[3], stop_loss_pct: r[4], take_profit_pct: r[5], return_pct: (r[6] / 100).toFixed(4), num_trades: r[7] })));
+  /* ---------- 3. RSI(2) Pullback: a few trades a month, held for days ---------- */
+  const W = newBook();
+  {
+    const when = Math.min(at(0, 15, 50), anchor);
+    const rows = {
+      AAPL: [62.4, 6.1, 2.2], MSFT: [71.8, 3.4, 1.9], SPY: [55.0, 7.9, 0.8], QQQ: [58.3, 8.8, 1.0],
+      NVDA: [18.6, 4.1, -2.4], TSLA: [8.9, -3.2, -4.8], AMD: [43.1, 8.2, -0.8], PLTR: [49.2, 21.0, 1.1],
+    };
+    for (const [sym, [rsi2, v200, v5]] of Object.entries(rows)) {
+      const px = sym === "AMD" ? 158.22 : DEMO_PRICE[sym], up = v200 > 0, dip = rsi2 < 10;
+      const checks = [{ label: "Price above its 200-day average (uptrend)", ok: up }, { label: "RSI(2) below 10 (a sharp dip)", ok: dip }];
+      let reason = "RSI(2) is " + rsi2.toFixed(1) + ", not a sharp dip. No buy.";
+      if (sym === "AMD") { reason = "Still holding AMD (day 3 of 7). The price is below its 5-day average, so the bot keeps holding."; checks.length = 0; checks.push({ label: "Price above its 5-day average (time to sell)", ok: false }, { label: "Held 7 trading days or more (3 so far)", ok: false }); }
+      else if (dip && !up) reason = "RSI(2) is " + rsi2.toFixed(1) + ", a sharp dip, but the price is below its 200-day average, so the bot stays out.";
+      else if (rsi2 < 25) reason = "RSI(2) is " + rsi2.toFixed(1) + ", getting low but not below 10 yet. No buy.";
+      dec(W, when, sym, px, { rsi2, vs_sma200: v200, vs_sma5: v5 }, "none", reason, checks);
+    }
+    const amd = { t: at(2, 15, 48), sym: "AMD", dir: "long", px: 157.64, qty: 79, reason: "RSI(2) is 9.7, a sharp dip, and the price is still above its 200-day average, so the bot buys the dip.", stopPct: 0.08, tpPct: 0.2 };
+    amd.levels = addEntry(W, { ...amd, open: true });
+    addHolding(W, amd, 158.22);
+    const hist = [[7, "NVDA", "long", 124.3, 100, 3, "Market exit", 128.9], [9, "TSLA", "long", 242.2, 51, 4, "Market exit", 237.9], [9, "SPY", "long", 561.5, 22, 2, "Market exit", 566.8]];
+    for (const [back, sym, dir, px, qty, held, kind, exit] of hist) {
+      if (lastIdx - back < 4) continue;
+      const t = at(back, 15, 48);
+      addEntry(W, { t, sym, dir, px, qty, reason: "RSI(2) is 8.4, a sharp dip, and the price is still above its 200-day average, so the bot buys the dip.", stopPct: 0.08, tpPct: 0.2 });
+      addExit(W, { t, tEnd: at(Math.max(0, back - held), 15, 48), sym, dir, px, qty, exit, kind, why: "The price recovered above its 5-day average, so the bot sells." });
+    }
+  }
 
-  const status = {
-    schema: 1,
-    updated_at: new Date(openNow ? now : anchor + 30000).toISOString(),
-    strategy: {
-      id: "rsi-reversion", name: "RSI Reversion",
-      description: "Bets that a sharp drop or spike on the 1-minute chart will snap back. It goes long when RSI falls to the oversold level and short when RSI rises to the overbought level. Every entry comes with its own stop-loss and take-profit, which Alpaca manages.",
-      timeframe: "1-minute bars",
-      rules: ["Go long when RSI(14) falls to 30 or lower.", "Go short when RSI(14) rises to 70 or higher.", "Each entry gets a stop-loss 0.40% away and a take-profit 0.80% away.", "Only one position per symbol at a time. The stop-loss or take-profit closes it."],
-      params: [
-        { label: "RSI period", display: "14 bars", hint: "How many 1-minute bars RSI looks back over" },
-        { label: "Oversold level", display: "30", hint: "RSI at or below this triggers a long" },
-        { label: "Overbought level", display: "70", hint: "RSI at or above this triggers a short" },
-        { label: "Stop-loss", display: "0.40%", hint: "Distance from entry where the position is closed at a loss" },
-        { label: "Take-profit", display: "0.80%", hint: "Distance from entry where the position is closed at a gain" },
-      ],
-      indicators: [{ key: "rsi", label: "RSI (14)", decimals: 1, range: [0, 100], marks: [{ value: 30, label: "Oversold" }, { value: 70, label: "Overbought" }] }],
-      symbols: ["AAPL", "MSFT", "SPY"],
-      settings: [
-        { label: "Max daily loss", display: "3.0%", hint: "New trades stop for the day if the account falls this far" },
-        { label: "Position size", display: "33% of equity", hint: "Per symbol, rounded down to whole shares" },
-        { label: "Check interval", display: "60 sec", hint: "How often the bot looks at the market" },
-        { label: "Cooldown", display: "5 min", hint: "Minimum gap between order attempts in one symbol" },
-      ],
-    },
-    bot: { state: openNow ? "running" : "stopped", message: openNow ? "Checking the market." : "The market is closed. The next scheduled run starts before the open.", started_at: new Date(anchor - 3 * 3600000).toISOString(), passes: 187, last_pass_at: new Date(openNow ? now - 20000 : anchor).toISOString(), errors_in_row: 0, last_error: null, last_error_at: null, run_url: null },
-    market: { is_open: openNow },
-    account: { equity: last.v, last_equity: prevClose, day_pnl: last.v - prevClose, day_pnl_pct: (last.v - prevClose) / prevClose * 100, cash: Math.round((last.v - gross) * 100) / 100, buying_power: Math.round(last.v * 4 * 100) / 100, status: "ACTIVE", starting_equity: 100000, tracking_since: new Date(equity[0].t).toISOString() },
-    positions, open_orders: openOrders, recent_orders: recent,
-    tuning: { last_tuned: new Date(lastTuned).toISOString(), backtest_return_pct: 0.71 },
-  };
-  return { strategies: [{ id: "rsi-reversion", name: "RSI Reversion" }], status, equity, decisions, orders, tuning: rows, demo: true, loadedAt: Date.now() };
+  /* ---------- put each strategy's account together ---------- */
+  function finish(id, B, name) {
+    const eq = curves[id], last = eq[eq.length - 1], key = etKey(last.t);
+    const firstToday = eq.findIndex((p) => etKey(p.t) === key), prev = firstToday > 0 ? eq[firstToday - 1].v : eq[0].v;
+    const gross = B.positions.reduce((s, p) => s + Math.abs(p.market_value), 0);
+    const desc = JSON.parse(JSON.stringify(DEMO_DESC[id]));
+    const off = notSet && id === "orb";
+    desc.configured = !off;
+    const meta = { id, name: desc.name, description: desc.description, kind: desc.kind, timeframe: desc.timeframe, configured: !off, symbols: syms };
+    const sorted = (a, k) => a.slice().sort((x, y) => Date.parse(x[k]) - Date.parse(y[k]));
+    const status = {
+      schema: 2, updated_at: iso(openNow ? now : anchor + 30000), strategy: desc,
+      bot: off
+        ? { state: "not_configured", message: "No API keys yet. Add the secrets APCA_API_KEY_ID_ORB and APCA_API_SECRET_KEY_ORB in the repo settings to switch this strategy on.", started_at: null, passes: 0, last_pass_at: null, errors_in_row: 0, last_error: null, last_error_at: null, run_url: null, version: "7.0.0" }
+        : { state: openNow ? "running" : "stopped", message: openNow ? "Checking the market." : "The market is closed. The next scheduled run starts before the open.", started_at: iso(anchor - 3 * 3600000), passes: 187, last_pass_at: iso(openNow ? now - 20000 : anchor), errors_in_row: 0, last_error: null, last_error_at: null, run_url: null, version: "7.0.0" },
+      market: { is_open: openNow },
+      account: off ? {} : { equity: last.v, last_equity: prev, day_pnl: r2(last.v - prev), day_pnl_pct: (last.v - prev) / prev * 100, cash: r2(last.v - gross), buying_power: r2(last.v * 4), status: "ACTIVE", starting_equity: 100000, tracking_since: iso(eq[0].t) },
+      positions: off ? [] : B.positions, open_orders: off ? [] : B.openOrders, recent_orders: off ? [] : B.recent.sort((a, b) => Date.parse(b.filled_at || b.submitted_at) - Date.parse(a.filled_at || a.submitted_at)),
+      tuning: id === "rsi-reversion" ? { last_tuned: iso(at(0, 17, 0) - (openNow ? 86400000 : 0)), backtest_return_pct: 0.71 } : null,
+    };
+    return { meta, status, equity: off ? [] : eq, trades: off ? [] : sorted(B.trades, "t"), decisions: off ? [] : sorted(B.decisions, "t"), orders: off ? [] : sorted(B.orders, "t"), demo: true, tuning: [] };
+  }
+  const byId = { "rsi-reversion": finish("rsi-reversion", R), orb: finish("orb", O), "rsi2-swing": finish("rsi2-swing", W) };
+
+  // the nightly tuner's history (RSI Reversion only)
+  const lastTuned = at(0, 17, 0) - (openNow ? 86400000 : 0), rows = [];
+  const tune = (d, sym, per, lo, hi, sl, tp, ret, n) => rows.push({ date: fKey.format(lastTuned - d * 86400000), symbol: sym, rsi_period: per, rsi_oversold: lo, rsi_overbought: hi, stop_loss_pct: sl, take_profit_pct: tp, return_pct: (ret / 100).toFixed(4), num_trades: n });
+  [["AAPL", 14, 30, 70, 0.004, 0.008, 0.71, 44], ["MSFT", 14, 30, 70, 0.004, 0.008, 0.33, 31], ["SPY", 14, 30, 70, 0.004, 0.008, 0.52, 39]].forEach((r) => tune(0, ...r));
+  [["AAPL", 14, 30, 70, 0.004, 0.008, 0.62, 41], ["MSFT", 21, 25, 75, 0.003, 0.006, 0.31, 28], ["SPY", 14, 30, 70, 0.004, 0.008, 0.44, 36]].forEach((r) => tune(1, ...r));
+  [["AAPL", 14, 35, 65, 0.004, 0.008, 0.55, 52], ["MSFT", 10, 30, 70, 0.006, 0.012, 0.27, 33], ["SPY", 21, 30, 70, 0.003, 0.006, 0.38, 24]].forEach((r) => tune(2, ...r));
+  byId["rsi-reversion"].tuning = rows;
+
+  return { strategies: ["rsi-reversion", "orb", "rsi2-swing"].map((id) => byId[id].meta), byId, demo: true, loadedAt: Date.now() };
 }
 
 /* ======================= state ======================= */
 const ui = {
   range: "day", tab: store.get("tab") || "orders", feed: "signals",
-  strategy: null, auto: store.get("auto") !== "off", demo: false, theme: store.get("theme") || "auto",
+  view: store.get("view") || "compare", auto: store.get("auto") !== "off", demo: false, theme: store.get("theme") || "auto",
 };
 ui.demo = params.has("demo") || !LIVE_CAPABLE;
 let model = null, lastError = null, charts = [], inflight = false;
@@ -613,10 +759,22 @@ function bySymbol(decisions) {
   for (const k of Object.keys(hist)) hist[k] = hist[k].slice(-90);
   return { latest, hist };
 }
-function health(m) {
-  const b = m.status.bot || {}, upd = Date.parse(m.status.updated_at), age = Date.now() - upd;
+function isConfigured(e) {
+  const st = e.status && e.status.bot && e.status.bot.state;
+  return st !== "not_configured" && e.meta.configured !== false;
+}
+const entriesOf = (m) => m.strategies.map((s) => m.byId[s.id]).filter(Boolean);
+const activeEntries = (m) => entriesOf(m).filter(isConfigured);
+const SERIES_MAX = 8;
+const colorVar = (i) => "var(--s" + (Math.min(Math.max(i, 0), SERIES_MAX - 1) + 1) + ")";
+const colorOf = (m, id) => colorVar(m.strategies.findIndex((s) => s.id === id));
+const nameOf = (m, id) => { const s = m.strategies.find((x) => x.id === id); return s ? (s.name || s.id) : id; };
+
+function healthOf(e) {
+  const b = e.status.bot || {}, upd = Date.parse(e.status.updated_at), age = Date.now() - upd;
   const stale = !Number.isNaN(upd) && age > CONFIG.staleMinutes * 60000;
   const quiet = { tone: "warn", glyph: "!", label: "No heartbeat", detail: "The bot last reported " + ago(upd) + " but says it is still running. The run may have been cancelled or crashed. Open the run log to check." };
+  if (!isConfigured(e)) return { tone: "idle", glyph: "○", label: "Not set up", detail: b.message };
   switch (b.state) {
     case "running": return stale ? quiet : { tone: "good", glyph: "●", label: "Running", detail: b.message };
     case "waiting": return stale ? quiet : { tone: "good", glyph: "●", label: "Waiting for open", detail: b.message };
@@ -625,6 +783,83 @@ function health(m) {
     case "halted": return { tone: "warn", glyph: "!", label: "Halted", detail: b.message };
     default: return { tone: "idle", glyph: "○", label: "Idle", detail: b.message };
   }
+}
+// One chip for the whole page: the worst state among the strategies that are switched on.
+function healthAll(m) {
+  const act = activeEntries(m);
+  if (!act.length) return { tone: "idle", glyph: "○", label: "Nothing switched on", detail: "" };
+  const hs = act.map(healthOf), rank = { bad: 3, warn: 2, good: 1, idle: 0 };
+  const worst = hs.reduce((a, b) => (rank[b.tone] > rank[a.tone] ? b : a));
+  if (worst.tone === "bad" || worst.tone === "warn") {
+    const n = hs.filter((x) => x.tone === worst.tone).length;
+    return { tone: worst.tone, glyph: worst.glyph, label: n > 1 ? n + " need attention" : worst.label, detail: worst.detail };
+  }
+  const running = hs.filter((x) => x.tone === "good").length;
+  return running ? { tone: "good", glyph: "●", label: running === hs.length ? "All running" : running + " of " + hs.length + " running", detail: "" } : { tone: "idle", glyph: "○", label: "Idle", detail: "" };
+}
+
+function tradeStats(trades) {
+  const n = trades.length;
+  const wins = trades.filter((t) => t.pnl > 0), losses = trades.filter((t) => t.pnl < 0);
+  const gw = wins.reduce((s, t) => s + t.pnl, 0), gl = -losses.reduce((s, t) => s + t.pnl, 0);
+  return {
+    n, wins: wins.length, losses: losses.length,
+    winRate: n ? wins.length / n * 100 : null,
+    total: trades.reduce((s, t) => s + (t.pnl || 0), 0),
+    avgWin: wins.length ? gw / wins.length : null,
+    avgLoss: losses.length ? -gl / losses.length : null,
+    profitFactor: gl > 0 ? gw / gl : (gw > 0 ? Infinity : null),
+  };
+}
+function maxDrawdown(pts) {
+  if (!pts.length) return null;
+  let peak = -Infinity, worst = 0;
+  for (const p of pts) { peak = Math.max(peak, p.v); worst = Math.min(worst, (p.v - peak) / peak * 100); }
+  return worst;
+}
+
+// The period being compared. "day" is the latest session; "all" starts on the first moment every
+// switched-on account had data, so the lines are compared from the same start.
+function periodOf(m, range) {
+  const act = activeEntries(m).filter((e) => e.equity.length);
+  if (!act.length) return null;
+  if (range === "day") {
+    const key = etKey(Math.max(...act.map((e) => e.equity[e.equity.length - 1].t)));
+    const start = Math.min(...act.flatMap((e) => e.equity.filter((p) => etKey(p.t) === key).map((p) => p.t)));
+    return { range, key, start, label: key === etKey(Date.now()) ? "Today" : "Last session" };
+  }
+  const start = Math.max(...act.map((e) => e.equity[0].t));
+  return { range, start, label: "Since " + fDay.format(start) };
+}
+function sliceFor(e, period) {
+  const pts = e.equity, day = period.range === "day";
+  let baseIdx = -1;
+  for (let i = 0; i < pts.length; i++) { if (day ? pts[i].t < period.start : pts[i].t <= period.start) baseIdx = i; else break; }
+  const inside = pts.filter((p) => day ? (etKey(p.t) === period.key && p.t >= period.start) : p.t >= period.start);
+  const base = baseIdx >= 0 ? pts[baseIdx] : inside[0] || pts[0];
+  return { base, inside };
+}
+function tradesIn(e, period) {
+  return e.trades.filter((t) => { const ms = Date.parse(t.t); return period.range === "day" ? etKey(ms) === period.key : ms >= period.start; });
+}
+
+// Build the overlay lines: every strategy as percent return from its own value at the common start.
+function buildCompare(m, period) {
+  const act = activeEntries(m).filter((e) => e.equity.length), parts = act.map((e) => ({ e, ...sliceFor(e, period) }));
+  const set = new Set();
+  parts.forEach((p) => p.inside.forEach((q) => set.add(q.t)));
+  let ts = Array.from(set).sort((a, b) => a - b);
+  if (ts.length > 400) { const k = Math.ceil(ts.length / 400); ts = ts.filter((_, i) => i % k === 0 || i === ts.length - 1); }
+  const series = parts.map((p) => {
+    let j = -1;
+    const pts = ts.map((t) => {
+      while (j + 1 < p.inside.length && p.inside[j + 1].t <= t) j++;
+      const val = j >= 0 ? p.inside[j].v : p.base.v;
+      return { t, val, pct: (val / p.base.v - 1) * 100 };
+    });
+    return { id: p.e.meta.id, name: p.e.meta.name || p.e.meta.id, color: colorOf(m, p.e.meta.id), pts, base: p.base.v };
+  });
+  return { ts, series };
 }
 
 /* ======================= small components ======================= */
@@ -645,13 +880,13 @@ function actionChip(a) {
     default: return null;
   }
 }
-function dirChip(dir) { return dir === "long" ? chip("Long", "long", "▲") : chip("Short", "short", "▼"); }
+function dirChip(dir) { return dir === "long" ? chip("Long", "long", "▲") : dir === "exit" ? chip("Exit", "idle", "■") : chip("Short", "short", "▼"); }
 function card(title, sub, ...body) {
   return h("section", { class: "card" }, (title || sub) ? h("div", { class: "card-h" }, title ? h("h2", { text: title }) : null, sub ? h("p", { class: "sub", text: sub }) : null) : null, ...body);
 }
 function tableOf(head, rows, opts = {}) {
   const t = h("table", { class: "t" });
-  t.append(h("thead", null, h("tr", null, head.map((c) => h("th", { class: (c.num ? "num " : "") + (c.nowrap ? "nowrap" : ""), text: c.label })))));
+  t.append(h("thead", null, h("tr", null, head.map((c) => h("th", { class: (c.num ? "num " : "") + (c.nowrap ? "nowrap" : "") }, c.node || c.label)))));
   t.append(h("tbody", null, rows.map((r) => h("tr", null, r.map((cell, i) => {
     const col = head[i] || {};
     return h("td", { class: (col.num ? "num " : "") + (col.nowrap ? "nowrap " : "") + (col.cls || "") }, cell);
@@ -683,7 +918,7 @@ function drawLine(host, pts, o) {
     tx.textContent = fmtTick(t, step);
     svg.append(tx);
   });
-  o.xticks(pts).forEach(({ i, label }) => {
+  spaced(o.xticks(pts), X, 52).forEach(({ i, label }) => {
     const tx = sv("text", { x: X(i), y: H - 8, class: "tick", "text-anchor": i === 0 ? "start" : i === n - 1 ? "end" : "middle" });
     tx.textContent = label;
     svg.append(tx);
@@ -827,22 +1062,111 @@ function plainMessage(text) {
 
 function drawAll() { charts.forEach((c) => { try { c(); } catch (e) { console.error(e); } }); }
 
+
+// Several accounts as lines on one chart, every one as percent change from the same start.
+function makeXticks(range) {
+  return range === "day"
+    ? (ps) => { const out = []; let lastH = null; ps.forEach((p, i) => { const hr = Number(fHourNum.format(p.t)); if (hr !== lastH) { out.push({ i, label: fHour.format(p.t) }); lastH = hr; } }); return thin(out, 6); }
+    : (ps) => { const out = []; let lastD = null; ps.forEach((p, i) => { const k = etKey(p.t); if (k !== lastD) { out.push({ i, label: fDay.format(p.t) }); lastD = k; } }); return thin(out, 6); };
+}
+function drawCompare(host, cmp, o) {
+  host.replaceChildren();
+  const ts = cmp.ts, n = ts.length, ss = cmp.series;
+  if (n < 2 || !ss.length) { host.append(emptyNote(o.empty)); return; }
+  const W = Math.max(260, Math.floor(host.clientWidth)), H = 280, m = { l: 58, r: 64, t: 16, b: 28 };
+  let mn = 0, mx = 0;
+  ss.forEach((s) => s.pts.forEach((p) => { mn = Math.min(mn, p.pct); mx = Math.max(mx, p.pct); }));
+  const { ticks, lo, hi, step } = niceTicks(mn, mx, 4);
+  const dp = step >= 1 ? 0 : step >= 0.1 ? 1 : 2;
+  const fp = (v) => (v > 0 ? "+" : v < 0 ? "−" : "") + Math.abs(v).toFixed(dp) + "%";
+  const X = (i) => m.l + (i / (n - 1)) * (W - m.l - m.r);
+  const Y = (v) => m.t + (1 - (v - lo) / (hi - lo)) * (H - m.t - m.b);
+  const svg = sv("svg", { viewBox: "0 0 " + W + " " + H, class: "chart", role: "img", tabindex: "0", "aria-label": o.label });
+
+  ticks.forEach((t) => {
+    const y = Y(t);
+    svg.append(sv("line", { x1: m.l, x2: W - m.r, y1: y, y2: y, class: Math.abs(t) < 1e-9 ? "axisline" : "grid" }));
+    const tx = sv("text", { x: m.l - 8, y: y + 4, class: "tick", "text-anchor": "end" });
+    tx.textContent = fp(t);
+    svg.append(tx);
+  });
+  spaced(o.xticks(ts.map((t) => ({ t }))), X, 52).forEach(({ i, label }) => {
+    const tx = sv("text", { x: X(i), y: H - 8, class: "tick", "text-anchor": i === 0 ? "start" : i === n - 1 ? "end" : "middle" });
+    tx.textContent = label;
+    svg.append(tx);
+  });
+
+  ss.forEach((s) => {
+    const p = sv("path", { d: s.pts.map((q, i) => (i ? "L" : "M") + X(i).toFixed(1) + "," + Y(q.pct).toFixed(1)).join(""), class: "cl" });
+    p.style.stroke = s.color;
+    svg.append(p);
+  });
+  // end markers and their values, nudged apart so close lines stay readable
+  const ends = ss.map((s) => ({ s, y: Y(s.pts[n - 1].pct) })).sort((a, b) => a.y - b.y);
+  const lab = ends.map((e) => e.y);
+  for (let i = 1; i < lab.length; i++) lab[i] = Math.max(lab[i], lab[i - 1] + 14);
+  const over = lab.length ? lab[lab.length - 1] - (H - m.b) : 0;
+  if (over > 0) for (let i = 0; i < lab.length; i++) lab[i] -= over;
+  ends.forEach((e, i) => {
+    const d = sv("circle", { cx: X(n - 1), cy: e.y, r: 4, class: "cdot" });
+    d.style.fill = e.s.color;
+    const t = sv("text", { x: X(n - 1) + 9, y: lab[i] + 4, class: "endnum" });
+    t.textContent = spct(e.s.pts[n - 1].pct);
+    svg.append(d, t);
+  });
+
+  const cross = sv("line", { y1: m.t, y2: H - m.b, class: "cross", visibility: "hidden" });
+  const hovs = ss.map((s) => { const c = sv("circle", { r: 5, class: "cdot", visibility: "hidden" }); c.style.fill = s.color; return c; });
+  const hit = sv("rect", { x: m.l, y: m.t, width: W - m.l - m.r, height: H - m.t - m.b, class: "hit" });
+  svg.append(cross, ...hovs, hit);
+  const tip = h("div", { class: "tip", hidden: true });
+  host.append(svg, tip);
+
+  function show(i) {
+    i = Math.max(0, Math.min(n - 1, i));
+    const x = X(i);
+    cross.setAttribute("x1", x); cross.setAttribute("x2", x); cross.setAttribute("visibility", "visible");
+    hovs.forEach((c, k) => { c.setAttribute("cx", x); c.setAttribute("cy", Y(ss[k].pts[i].pct)); c.setAttribute("visibility", "visible"); });
+    tip.replaceChildren(
+      h("div", { class: "tip-s", text: stamp(ts[i]) }),
+      ...ss.map((s) => { const q = s.pts[i]; return h("div", { class: "tip-row" },
+        h("span", { class: "nm" }, h("span", { class: "swatch", style: "--c:" + s.color, "aria-hidden": "true" }), s.name),
+        h("span", { class: "vv " + tone(q.pct) }, spct(q.pct) + " · " + money(q.val, 0))); }));
+    tip.hidden = false;
+    tip.style.left = Math.min(Math.max(x, 130), W - 130) + "px";
+  }
+  function hide() { cross.setAttribute("visibility", "hidden"); hovs.forEach((c) => c.setAttribute("visibility", "hidden")); tip.hidden = true; }
+  const idxAt = (e) => { const r = svg.getBoundingClientRect(); return Math.round(((e.clientX - r.left) * (W / r.width) - m.l) / (W - m.l - m.r) * (n - 1)); };
+  hit.addEventListener("pointermove", (e) => show(idxAt(e)));
+  hit.addEventListener("pointerdown", (e) => show(idxAt(e)));
+  hit.addEventListener("pointerleave", hide);
+  let kb = n - 1;
+  svg.addEventListener("focus", () => show(kb));
+  svg.addEventListener("blur", hide);
+  svg.addEventListener("keydown", (e) => {
+    if (e.key === "ArrowLeft") { kb = Math.max(0, kb - 1); show(kb); e.preventDefault(); }
+    if (e.key === "ArrowRight") { kb = Math.min(n - 1, kb + 1); show(kb); e.preventDefault(); }
+  });
+}
+
 /* ======================= sections ======================= */
-function renderBanners(m) {
+function renderBanners(list, demo) {
   const out = [];
-  if (m.demo) {
+  if (demo) {
     out.push(h("div", { class: "banner", role: "status" },
       h("span", { class: "g t-warn", "aria-hidden": "true" }, "!"),
       h("div", null, h("b", { text: "Sample data. " }), "These numbers are made up to show the layout. Your bot's real records appear here once it has run.",
         LIVE_CAPABLE ? h("div", null, h("button", { class: "btn", type: "button", onclick: () => setDemo(false) }, "Show my bot's data")) : null)));
+    return out;
   }
-  const hl = health(m);
-  if (!m.demo && (hl.tone === "warn" || hl.tone === "bad")) {
+  list.filter(isConfigured).forEach((e) => {
+    const hl = healthOf(e), b = e.status.bot || {};
+    if (hl.tone !== "warn" && hl.tone !== "bad") return;
     out.push(h("div", { class: "banner", role: "alert" },
       h("span", { class: "g t-" + hl.tone, "aria-hidden": "true" }, hl.glyph),
-      h("div", null, h("b", { text: hl.label + ". " }), hl.detail || "",
-        m.status.bot && m.status.bot.run_url ? h("div", null, h("a", { href: m.status.bot.run_url, target: "_blank", rel: "noopener" }, "Open the run log")) : null)));
-  }
+      h("div", null, h("b", { text: (list.length > 1 ? (e.meta.name || e.meta.id) + ": " : "") + hl.label + ". " }), hl.detail || "",
+        b.run_url ? h("div", null, h("a", { href: b.run_url, target: "_blank", rel: "noopener" }, "Open the run log")) : null)));
+  });
   return out;
 }
 
@@ -919,30 +1243,39 @@ function renderDaily(m) {
 }
 
 function renderStrategy(m) {
-  const s = m.status.strategy || {}, t = m.status.tuning || {};
+  const s = m.status.strategy || {}, t = m.status.tuning;
   const left = h("div", null,
     h("h3", { text: s.name || "Strategy" }),
     h("p", { class: "muted", style: "margin-top:4px", text: s.description || "" }),
+    s.schedule ? h("p", { class: "small", style: "margin-top:10px" }, h("b", { text: "When it acts: " }), s.schedule) : null,
     h("div", { class: "small muted", style: "margin-top:12px; font-weight:500", text: "How it decides" }),
     h("ul", { class: "rules" }, (s.rules || []).map((r) => h("li", { text: r }))),
     h("div", { class: "small muted", style: "margin-top:12px; font-weight:500", text: "Watching · " + (s.timeframe || "") }),
     h("div", { class: "syms" }, (s.symbols || []).map((x) => h("span", { class: "sym-chip", text: x }))));
   const kv = (rows) => h("table", { class: "kv" }, h("tbody", null, rows.map((r) => h("tr", null, h("th", { scope: "row" }, r.label, r.hint ? h("span", { class: "hint", text: r.hint }) : null), h("td", { text: r.display })))));
+  const tuneNote = t && t.last_tuned
+    ? "The nightly tuner last ran " + ago(Date.parse(t.last_tuned)) + (t.backtest_return_pct != null ? " and picked these settings from a backtest that returned " + spct(Number(t.backtest_return_pct)) + "." : ".")
+    : t ? "The nightly tuner has not changed these settings yet."
+    : "These settings are fixed. The nightly tuner only adjusts RSI Reversion.";
   const right = h("div", null,
     h("h3", { text: "Parameters" }), kv(s.params || []),
     h("h3", { style: "margin-top:16px", text: "Risk and timing" }), kv(s.settings || []),
-    t.last_tuned ? h("p", { class: "small muted", style: "margin-top:12px", text: "The nightly tuner last ran " + ago(Date.parse(t.last_tuned)) + (t.backtest_return_pct != null ? " and picked these settings from a backtest that returned " + spct(Number(t.backtest_return_pct)) + "." : ".") })
-      : h("p", { class: "small muted", style: "margin-top:12px", text: "The nightly tuner has not changed these settings yet." }));
-  return card("Strategy", "What the bot is running", h("div", { class: "strat" }, left, right));
+    h("p", { class: "small muted", style: "margin-top:12px", text: tuneNote }));
+  return card("Strategy", "What this bot is running", h("div", { class: "strat" }, left, right));
 }
 
 function gaugeNode(ind, value) {
   const [lo, hi] = ind.range, pct = (v) => Math.max(0, Math.min(100, (v - lo) / (hi - lo) * 100));
   const g = h("div", { class: "gauge", role: "img", "aria-label": ind.label + " " + value.toFixed(ind.decimals ?? 1) });
   const marks = ind.marks || [];
-  if (marks.length >= 2) {
-    g.append(h("div", { class: "zone", style: "left:0;width:" + pct(marks[0].value) + "%" }));
-    g.append(h("div", { class: "zone", style: "left:" + pct(marks[marks.length - 1].value) + "%;right:0" }));
+  // The shaded part is where the conditions for acting are met. "zone" says which part that is.
+  const zone = ind.zone || (marks.length >= 2 ? "outside" : null);
+  if (marks.length && zone) {
+    const a = pct(marks[0].value), b = pct(marks[marks.length - 1].value), zn = (l, w) => g.append(h("div", { class: "zone", style: "left:" + l + "%;width:" + w + "%" }));
+    if (zone === "outside") { zn(0, a); zn(b, 100 - b); }
+    else if (zone === "between") zn(a, b - a);
+    else if (zone === "below") zn(0, a);
+    else if (zone === "above") zn(a, 100 - a);
   }
   marks.forEach((mk) => g.append(h("div", { class: "mk", style: "left:" + pct(mk.value) + "%" }, h("span", { text: mk.label + " " + mk.value }))));
   g.append(h("div", { class: "gdot", style: "left:" + pct(value) + "%" }));
@@ -974,12 +1307,12 @@ function renderRead(m) {
           h("div", { class: "gauge-row" }, h("span", { text: ind.label }), h("b", { text: Number(val).toFixed(ind.decimals ?? 1) })),
           ind.range ? gaugeNode(ind, Number(val)) : null));
       });
-      Object.entries(d.indicators || {}).filter(([k]) => !shown.has(k)).forEach(([k, v]) => body.push(h("div", { class: "gauge-row" }, h("span", { text: k }), h("b", { text: String(v) }))));
+      Object.entries(d.indicators || {}).filter(([k]) => !shown.has(k)).forEach(([k, v]) => body.push(h("div", { class: "gauge-row" }, h("span", { text: k.replace(/_/g, " ") }), h("b", { text: String(v) }))));
       if ((d.checks || []).length) body.push(h("ul", { class: "checks" }, d.checks.map((c) => h("li", { class: c.ok ? "on" : "" }, h("span", { class: "mark", "aria-hidden": "true", text: c.ok ? "✓" : "✕" }), h("span", null, h("span", { class: "sr", text: c.ok ? "Met: " : "Not met: " }), c.label)))));
       body.push(h("p", { class: "reason", text: d.reason }));
       const ac = actionChip(d.action);
       if (ac) body.push(h("div", { class: "small" }, ac, d.detail ? h("span", { class: "muted", text: " " + d.detail }) : null));
-      const ind0 = inds.find((i) => i.range && d.indicators && d.indicators[i.key] != null);
+      const ind0 = inds.find((i) => i.range && i.spark && d.indicators && d.indicators[i.key] != null);
       if (ind0) {
         const vals = (hist[sym] || []).map((x) => x.indicators && x.indicators[ind0.key]).filter((v) => v != null).map(Number);
         const sh = h("div", { class: "spark" });
@@ -1011,7 +1344,7 @@ function resultChip(o, live) {
   return chip("Sent", "idle", "○");
 }
 function fillKind(o) {
-  if (o.order_class !== "bracket") return "Order";
+  if (o.order_class !== "bracket") return o.type === "market" ? "Closing order" : "Order";
   if (o.type === "stop" || o.type === "stop_limit") return "Stop-loss";
   if (o.type === "limit") return "Take-profit";
   return "Entry";
@@ -1048,7 +1381,7 @@ function renderFeedTab(m) {
     h("div", { class: "filters" }, h("div", { class: "seg", role: "group", "aria-label": "Which checks to show" }, mk("signals", "Signals and orders"), mk("all", "Every check")), h("span", { class: "small muted", text: rows.length + " shown, newest first" })),
     rows.length ? tableOf(
       [{ label: "When", nowrap: true }, { label: "Symbol" }, { label: "Price", num: true }, { label: "Readings" }, { label: "Signal" }, { label: "Result" }, { label: "Why", cls: "why" }],
-      rows.map((d) => [stamp(Date.parse(d.t)), h("span", { class: "mono", text: d.symbol }), money(d.price), Object.entries(d.indicators || {}).map(([k, v]) => k.toUpperCase() + " " + v).join(", ") || "–", signalChip(d), actionChip(d.action) || "", (d.detail && d.action !== "none" ? d.detail + " " : "") + d.reason]))
+      rows.map((d) => [stamp(Date.parse(d.t)), h("span", { class: "mono", text: d.symbol }), money(d.price), Object.entries(d.indicators || {}).map(([k, v]) => k.replace(/_/g, " ") + " " + v).join(", ") || "–", signalChip(d), actionChip(d.action) || "", (d.detail && d.action !== "none" ? d.detail + " " : "") + d.reason]))
       : emptyNote(ui.feed === "signals" ? "No signals yet. Switch to “Every check” to see each reading." : "No checks recorded yet."));
 }
 
@@ -1063,31 +1396,189 @@ function renderTuneTab(m) {
       : emptyNote("No tuning history yet. The nightly tuning job writes one row per symbol after the market closes."));
 }
 
+function heldText(a, b) {
+  const min = (Date.parse(b) - Date.parse(a)) / 60000;
+  if (!(min >= 0)) return "–";
+  if (min < 90) return Math.max(1, Math.round(min)) + " min";
+  if (min < 36 * 60) return Math.round(min / 60) + " h";
+  return Math.round(min / 1440) + " d";
+}
+function tradesTable(rows, m) {
+  const withStrat = !!m;
+  const head = [{ label: "Closed", nowrap: true }].concat(withStrat ? [{ label: "Strategy" }] : [], [{ label: "Symbol" }, { label: "Side" }, { label: "Shares", num: true }, { label: "Entry", num: true }, { label: "Exit", num: true }, { label: "Held", num: true }, { label: "Result", num: true }, { label: "How it ended" }]);
+  return tableOf(head, rows.map((t) => [stamp(Date.parse(t.t))].concat(
+    withStrat ? [h("span", { class: "legend-item" }, h("span", { class: "swatch", style: "--c:" + colorOf(m, t.sid), "aria-hidden": "true" }), nameOf(m, t.sid))] : [],
+    [h("span", { class: "mono", text: t.symbol }), dirChip(t.side), num(t.qty), money(t.entry), money(t.exit), heldText(t.opened_at, t.t),
+      h("span", { class: tone(t.pnl) }, arrow(t.pnl) + smoney(t.pnl) + (t.pnl_pct != null ? " (" + spct(t.pnl_pct) + ")" : "")), t.exit_kind || ""])));
+}
+function renderTradesTab(e) {
+  const st = tradeStats(e.trades), rows = e.trades.slice().reverse().slice(0, 100);
+  return h("div", null,
+    h("p", { class: "muted", style: "margin-bottom:10px", text: "A trade is closed when its position is gone, whether the stop-loss, the take-profit or the bot's own exit order ended it." }),
+    st.n ? h("p", { class: "small", style: "margin-bottom:10px" },
+      st.n + " closed · " + st.wins + " won, " + st.losses + " lost (" + (st.winRate == null ? "–" : st.winRate.toFixed(0) + "%") + " win rate) · total ", h("span", { class: tone(st.total) }, smoney(st.total))) : null,
+    rows.length ? tradesTable(rows) : emptyNote("No trades have closed yet. Each one appears here after its position is gone."));
+}
+
 function renderActivity(m) {
-  const tabs = [["orders", "Orders"], ["feed", "Every check"], ["tuning", "Tuning"]];
-  const tabBar = h("div", { class: "tabs", role: "tablist" }, tabs.map(([id, label]) => h("button", { type: "button", role: "tab", "aria-selected": String(ui.tab === id), onclick: () => { ui.tab = id; store.set("tab", id); render(); } }, label)));
-  const panel = ui.tab === "feed" ? renderFeedTab(m) : ui.tab === "tuning" ? renderTuneTab(m) : renderOrdersTab(m);
+  const hasTune = (m.tuning && m.tuning.length) || (m.status.tuning && m.status.tuning.last_tuned);
+  const tabs = [["orders", "Orders"], ["trades", "Closed trades"], ["feed", "Every check"]].concat(hasTune ? [["tuning", "Tuning"]] : []);
+  const tab = tabs.some(([id]) => id === ui.tab) ? ui.tab : "orders";
+  const tabBar = h("div", { class: "tabs", role: "tablist" }, tabs.map(([id, label]) => h("button", { type: "button", role: "tab", "aria-selected": String(tab === id), onclick: () => { ui.tab = id; store.set("tab", id); render(); } }, label)));
+  const panel = tab === "feed" ? renderFeedTab(m) : tab === "tuning" ? renderTuneTab(m) : tab === "trades" ? renderTradesTab(m) : renderOrdersTab(m);
   return card("Activity", null, tabBar, h("div", { role: "tabpanel" }, panel));
 }
 
-function renderFoot(m) {
-  const b = m.status.bot || {};
+function renderFoot(m, e) {
+  const b = (e && e.status.bot) || {};
   return h("div", { class: "foot" },
     h("span", { text: m.demo ? "Sample data" : "Data from " + CONFIG.owner + "/" + CONFIG.repo + " (branch " + CONFIG.dataBranch + ")" }),
     h("span", { text: "Times are US Eastern, the market's clock" }),
+    b.version ? h("span", { text: "Bot version " + b.version }) : null,
     b.run_url ? h("a", { href: b.run_url, target: "_blank", rel: "noopener" }, "Latest run log") : null);
 }
 
+function renderNotSetUp(m, e) {
+  const b = e.status.bot || {};
+  return card("Not switched on yet", e.meta.name || e.meta.id,
+    h("p", { text: b.message || "This strategy has no API keys yet." }),
+    h("ol", { class: "setup-steps" },
+      h("li", { text: "Create another paper account at Alpaca. Each strategy needs its own account, and a free Alpaca login allows three." }),
+      h("li", { text: "Generate an API key and secret for that account." }),
+      h("li", { text: "In your GitHub repo, open Settings, Secrets and variables, Actions, and add the two secrets named above." }),
+      h("li", { text: "Open the Actions tab, choose Trading Bot, and press Run workflow. This strategy starts on that run." })));
+}
+
+/* ---------- compare view ---------- */
+const swatchEl = (color, dot) => h("span", { class: "swatch" + (dot ? " dot" : ""), style: "--c:" + color, "aria-hidden": "true" });
+
+function renderCompareSummary(m) {
+  const act = activeEntries(m), sum = (f) => act.reduce((s, e) => s + (f(e) || 0), 0);
+  const eq = sum((e) => (e.status.account || {}).equity), start = sum((e) => (e.status.account || {}).starting_equity);
+  const today = sum((e) => (e.status.account || {}).day_pnl), prev = sum((e) => (e.status.account || {}).last_equity);
+  const total = eq - start, pos = act.flatMap((e) => e.status.positions || []);
+  const gross = pos.reduce((s, p) => s + Math.abs(p.market_value || 0), 0);
+  const key = etKey(Date.now()), td = act.flatMap((e) => e.trades.filter((t) => etKey(Date.parse(t.t)) === key));
+  const tst = tradeStats(td);
+  const stat = (k, v, d, cls) => h("div", { class: "stat" }, h("div", { class: "k", text: k }), h("div", { class: "v " + (cls || ""), text: v }), h("div", { class: "d", text: d }));
+  return h("div", { class: "summary" },
+    h("div", { class: "card hero" },
+      h("div", { class: "k", text: "All accounts together" }),
+      h("div", { class: "big", text: money(eq) }),
+      h("div", { class: "d", text: act.length + " paper accounts added up" })),
+    h("div", { class: "stats" },
+      stat("Today", arrow(today) + smoney(today), spct(prev ? today / prev * 100 : null) + " vs previous close", tone(today)),
+      stat("Since tracking began", arrow(total) + smoney(total), spct(start ? total / start * 100 : null) + " on " + money(start, 0), tone(total)),
+      stat("Open positions", String(pos.length), pos.length ? money(gross, 0) + " exposed" : "All flat, holding cash"),
+      stat("Closed trades today", String(tst.n), tst.n ? tst.wins + " won · " + tst.losses + " lost" : "None yet today")));
+}
+
+function renderCompareChart(m, period) {
+  const cmp = buildCompare(m, period), range = ui.range;
+  const dayLabel = (periodOf(m, "day") || {}).label || "Today";
+  const host = h("div", { class: "chart-host" });
+  charts.push(() => drawCompare(host, cmp, { label: "Percent return of each strategy from the same start", xticks: makeXticks(range), empty: "Not enough history yet. A point is recorded about every 5 minutes while the market is open." }));
+  const seg = h("div", { class: "seg", role: "group", "aria-label": "Time range" },
+    h("button", { type: "button", "aria-pressed": String(range === "day"), onclick: () => { ui.range = "day"; render(); } }, dayLabel),
+    h("button", { type: "button", "aria-pressed": String(range === "all"), onclick: () => { ui.range = "all"; render(); } }, "All time"));
+  const legend = h("div", { class: "legend" }, cmp.series.map((s) => {
+    const last = s.pts[s.pts.length - 1];
+    return h("span", { class: "legend-item" }, swatchEl(s.color), s.name, last ? h("b", { class: tone(last.pct), text: spct(last.pct) }) : null);
+  }));
+  const act = activeEntries(m).filter((e) => e.equity.length);
+  const staggered = act.length > 1 && new Set(act.map((e) => e.equity[0].t)).size > 1;
+  const note = range === "day" ? "Each line shows percent change since that account's previous close."
+    : staggered ? "Every line starts at 0% on " + stamp(period.start) + ", when the newest account began, so the comparison is fair."
+    : "Every line starts at 0% when tracking began.";
+  const step = Math.max(1, Math.ceil(cmp.ts.length / 60));
+  const idx = []; for (let i = cmp.ts.length - 1; i >= 0; i -= step) idx.push(i);
+  return card("Compare strategies", note,
+    h("div", { class: "card-h", style: "margin-top:-4px" }, seg),
+    legend, host,
+    cmp.ts.length ? dataDetails("Show values", tableOf([{ label: "Time (ET)", nowrap: true }].concat(cmp.series.map((s) => ({ label: s.name, num: true }))),
+      idx.map((i) => [stamp(cmp.ts[i])].concat(cmp.series.map((s) => spct(s.pts[i].pct)))))) : null);
+}
+
+function renderCompareTable(m, period) {
+  const act = activeEntries(m);
+  const cols = act.map((e) => {
+    const sl = sliceFor(e, period), last = sl.inside.length ? sl.inside[sl.inside.length - 1] : null, a = e.status.account || {};
+    return { e, ret: sl.base ? (last ? (last.v / sl.base.v - 1) * 100 : 0) : null, dd: sl.inside.length ? maxDrawdown([sl.base].concat(sl.inside)) : null, st: tradeStats(tradesIn(e, period)), a, pos: (e.status.positions || []).length };
+  });
+  const pf = (x) => x == null ? "–" : x === Infinity ? "∞" : x.toFixed(2);
+  const rows = [
+    ["Return", "Change in account value over the period", (c) => c.ret == null ? "–" : h("span", { class: tone(c.ret) }, arrow(c.ret) + spct(c.ret))],
+    ["Worst drop", "Biggest fall from a high point", (c) => c.dd == null ? "–" : h("span", { class: c.dd < 0 ? "loss" : "" }, c.dd < 0 ? "−" + Math.abs(c.dd).toFixed(2) + "%" : "0.00%")],
+    ["Win rate", "Share of closed trades that made money", (c) => c.st.winRate == null ? "–" : c.st.winRate.toFixed(0) + "% (" + c.st.wins + " of " + c.st.n + ")"],
+    ["Closed trades", null, (c) => String(c.st.n)],
+    ["Average win", null, (c) => c.st.avgWin == null ? "–" : h("span", { class: "gain" }, smoney(c.st.avgWin))],
+    ["Average loss", null, (c) => c.st.avgLoss == null ? "–" : h("span", { class: "loss" }, smoney(c.st.avgLoss))],
+    ["Profit factor", "Total won divided by total lost", (c) => pf(c.st.profitFactor)],
+    ["Account value", null, (c) => money(c.a.equity, 0)],
+    ["Today", null, (c) => c.a.day_pnl == null ? "–" : h("span", { class: tone(c.a.day_pnl) }, arrow(c.a.day_pnl) + smoney(c.a.day_pnl))],
+    ["Open positions", null, (c) => String(c.pos)],
+  ];
+  const t = h("table", { class: "t cmp" });
+  t.append(h("thead", null, h("tr", null, h("th", { text: "" }), cols.map((c) => h("th", { class: "colh" }, swatchEl(colorOf(m, c.e.meta.id)), c.e.meta.name || c.e.meta.id)))));
+  t.append(h("tbody", null, rows.map(([label, hint, f]) => h("tr", null, h("td", { class: "rowh" }, label, hint ? h("span", { class: "hint", text: hint }) : null), cols.map((c) => h("td", { class: "num" }, f(c)))))));
+  return card("Side by side", period.range === "day" ? period.label : "From " + stamp(period.start), cols.length ? h("div", { class: "tablewrap" }, t) : emptyNote("No strategies are switched on yet."));
+}
+
+function renderStrategyCards(m) {
+  const cards = entriesOf(m).map((e) => {
+    const hl = healthOf(e), a = e.status.account || {}, st = e.status.strategy || e.meta, on = isConfigured(e);
+    const total = !bad(a.equity) && !bad(a.starting_equity) ? a.equity - a.starting_equity : null;
+    const num2 = (k, v, cls) => h("div", null, h("div", { class: "k", text: k }), h("div", { class: "v " + (cls || ""), text: v }));
+    return h("div", { class: "scard" },
+      h("div", { class: "scard-top" }, h("h3", null, swatchEl(colorOf(m, e.meta.id)), e.meta.name || e.meta.id), chip(hl.label, hl.tone, hl.glyph)),
+      h("p", { class: "sched", text: st.schedule || st.timeframe || "" }),
+      on ? h("div", { class: "nums" },
+        num2("Account value", money(a.equity, 0)),
+        num2("Today", arrow(a.day_pnl) + smoney(a.day_pnl, 0), tone(a.day_pnl)),
+        num2("Since start", arrow(total) + smoney(total, 0), tone(total)),
+        num2("Open positions", String((e.status.positions || []).length)))
+        : h("p", { class: "small muted", text: (e.status.bot && e.status.bot.message) || "No API keys yet." }),
+      h("div", null, h("button", { class: "btn", type: "button", onclick: () => setView(e.meta.id) }, on ? "Open details" : "How to switch it on")));
+  });
+  return card("The strategies", "Each one trades its own paper account", h("div", { class: "scards" }, cards));
+}
+
+function renderCompareTrades(m) {
+  const all = entriesOf(m).flatMap((e) => e.trades.map((t) => ({ ...t, sid: e.meta.id }))).sort((a, b) => Date.parse(b.t) - Date.parse(a.t)).slice(0, 40);
+  return card("Recent closed trades", "All strategies, newest first", all.length ? tradesTable(all, m) : emptyNote("No trades have closed yet. Each one appears here after its position is gone."));
+}
+
+function renderCompareView(m) {
+  const period = periodOf(m, ui.range), out = renderBanners(entriesOf(m), m.demo);
+  out.push(renderCompareSummary(m));
+  if (period) out.push(renderCompareChart(m, period), renderCompareTable(m, period));
+  else out.push(card("Compare strategies", null, emptyNote("No account history yet. A point is recorded about every 5 minutes while the market is open.")));
+  out.push(renderStrategyCards(m), renderCompareTrades(m), renderFoot(m));
+  return out;
+}
+
+function renderSingleView(m, e) {
+  const out = renderBanners([e], m.demo);
+  if (!isConfigured(e)) { out.push(renderNotSetUp(m, e), renderStrategy(e), renderFoot(m, e)); return out; }
+  out.push(renderSummary(e), h("div", { class: "grid-2" }, renderCurve(e), renderDaily(e)), renderStrategy(e), renderRead(e), renderPositions(e), renderActivity(e), renderFoot(m, e));
+  return out;
+}
+
 /* ======================= page ======================= */
+function renderViews() {
+  const m = model, box = $("#views");
+  if (!m) { box.replaceChildren(); return; }
+  const tabs = [];
+  if (m.strategies.length > 1) tabs.push({ id: "compare", label: "Compare", node: h("span", { class: "g", "aria-hidden": "true", text: "≈" }) });
+  m.strategies.forEach((s, i) => tabs.push({ id: s.id, label: s.name || s.id, node: swatchEl(colorVar(i)) }));
+  box.replaceChildren(...tabs.map((t) => h("button", { type: "button", role: "tab", "aria-selected": String(ui.view === t.id), onclick: () => setView(t.id) }, t.node, t.label)));
+}
 function renderHeader() {
   const m = model;
-  $("#brand-sub").textContent = m ? "Paper account · " + ((m.status.strategy && m.status.strategy.name) || "") : "Paper account";
-  const sel = $("#strategy"), wrap = $("#sel-wrap");
-  if (m && m.strategies.length > 1) {
-    wrap.hidden = false;
-    sel.replaceChildren(...m.strategies.map((s) => h("option", { value: s.id, text: s.name || s.id, selected: s.id === ui.strategy })));
-  } else wrap.hidden = true;
-  const hl = m ? health(m) : null, hs = $("#health");
+  $("#brand-sub").textContent = !m ? "Paper accounts" : ui.view === "compare" ? activeEntries(m).length + " paper accounts" : "Paper account · " + nameOf(m, ui.view);
+  renderViews();
+  const e = m && ui.view !== "compare" ? m.byId[ui.view] : null;
+  const hl = m ? (e ? healthOf(e) : healthAll(m)) : null, hs = $("#health");
   hs.replaceChildren(...(hl ? [chip(hl.label, hl.tone, hl.glyph)] : []));
   hs.title = hl && hl.detail ? hl.detail : "";
   updateAgo();
@@ -1100,9 +1591,9 @@ function renderHeader() {
 }
 function updateAgo() {
   const el = $("#updated");
-  if (!model) { el.textContent = ""; return; }
-  const upd = Date.parse(model.status.updated_at);
-  el.textContent = model.demo ? "" : "Bot reported " + (Number.isNaN(upd) ? "–" : ago(upd));
+  if (!model || model.demo) { el.textContent = ""; return; }
+  const times = activeEntries(model).map((e) => Date.parse(e.status.updated_at)).filter((x) => !Number.isNaN(x));
+  el.textContent = times.length ? "Bot reported " + ago(Math.max(...times)) : "";
 }
 
 function render() {
@@ -1112,18 +1603,17 @@ function render() {
     renderHeader();
     return;
   }
-  app.replaceChildren(...renderBanners(model), renderSummary(model),
-    h("div", { class: "grid-2" }, renderCurve(model), renderDaily(model)),
-    renderStrategy(model), renderRead(model), renderPositions(model), renderActivity(model), renderFoot(model));
+  const body = ui.view === "compare" && model.strategies.length > 1 ? renderCompareView(model) : renderSingleView(model, model.byId[ui.view] || entriesOf(model)[0]);
+  app.replaceChildren(...body);
   renderHeader();
   requestAnimationFrame(drawAll);
 }
 
 function renderEmpty(err) {
   return card("No bot data yet", null,
-    h("p", { class: "muted", text: "This page reads files the bot publishes to the “" + CONFIG.dataBranch + "” branch of " + CONFIG.owner + "/" + CONFIG.repo + ". That branch is created the first time the new bot version runs." }),
+    h("p", { class: "muted", text: "This page reads files the bot publishes to the “" + CONFIG.dataBranch + "” branch of " + CONFIG.owner + "/" + CONFIG.repo + ". That branch is created the first time the bot runs." }),
     h("ol", { class: "rules" },
-      h("li", { text: "Check that bot.py, strategies.py, publisher.py and the workflow file in your repo are the new versions." }),
+      h("li", { text: "Check that bot.py, strategies.py, publisher.py and the workflow file in your repo are the newest versions." }),
       h("li", { text: "Open the repo's Actions tab, choose Trading Bot, and press Run workflow." }),
       h("li", { text: "When the run finishes, come back here and press Refresh." })),
     h("p", { class: "small muted", style: "margin-top:12px", text: "Technical detail: " + err.message }),
@@ -1131,6 +1621,11 @@ function renderEmpty(err) {
 }
 
 let demoCache = null;
+function fixView() {
+  if (!model) return;
+  const ids = model.strategies.map((s) => s.id);
+  if (ui.view === "compare" ? ids.length < 2 : !ids.includes(ui.view)) ui.view = ids.length > 1 ? "compare" : ids[0];
+}
 async function refresh() {
   if (inflight) return;
   inflight = true;
@@ -1138,6 +1633,7 @@ async function refresh() {
   try {
     if (ui.demo) { demoCache = demoCache || makeDemo(); model = demoCache; model.loadedAt = Date.now(); lastError = null; }
     else { model = await loadLive(); lastError = null; }
+    fixView();
   } catch (e) {
     lastError = e;
     if (!model || model.demo) model = null;
@@ -1148,6 +1644,12 @@ async function refresh() {
   render();
 }
 function setDemo(on) { ui.demo = on; model = null; lastError = null; render(); refresh(); }
+function setView(id) {
+  if (id === ui.view) return;
+  ui.view = id; store.set("view", id);
+  renderHeader();
+  if (ui.demo) render(); else refresh();
+}
 function applyTheme() {
   const root = document.documentElement;
   if (ui.theme === "auto") root.removeAttribute("data-theme"); else root.setAttribute("data-theme", ui.theme);
@@ -1157,7 +1659,6 @@ $("#refresh").addEventListener("click", refresh);
 $("#auto").addEventListener("click", () => { ui.auto = !ui.auto; store.set("auto", ui.auto ? "on" : "off"); renderHeader(); });
 $("#demo").addEventListener("click", () => setDemo(!ui.demo));
 $("#theme").addEventListener("click", () => { ui.theme = ui.theme === "auto" ? "light" : ui.theme === "light" ? "dark" : "auto"; store.set("theme", ui.theme); applyTheme(); renderHeader(); requestAnimationFrame(drawAll); });
-$("#strategy").addEventListener("change", (e) => { ui.strategy = e.target.value; refresh(); });
 
 let resizeTimer = null, lastW = 0;
 new ResizeObserver(() => {
