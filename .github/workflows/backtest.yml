@@ -1,0 +1,51 @@
+# File version: 1.0.0
+name: Backtest
+
+# Replays the strategies over past 1-minute data and saves the results for the dashboard.
+# Run it by hand: Actions tab, Backtest, Run workflow. It takes roughly 10 to 30 minutes.
+on:
+  workflow_dispatch:
+    inputs:
+      days:
+        description: "How many past trading days to replay (about 60 is a good start)"
+        default: "60"
+      balance:
+        description: "Starting account size in dollars"
+        default: "5000"
+
+permissions:
+  contents: write
+
+concurrency:
+  group: backtest
+  cancel-in-progress: false
+
+jobs:
+  backtest:
+    runs-on: ubuntu-latest
+    timeout-minutes: 300
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+
+      - run: pip install -r requirements.txt
+
+      - run: python backtest.py --days "$DAYS" --balance "$BALANCE"
+        env:
+          DAYS: ${{ inputs.days }}
+          BALANCE: ${{ inputs.balance }}
+          APCA_API_KEY_ID: ${{ secrets.APCA_API_KEY_ID_RSI || secrets.APCA_API_KEY_ID }}
+          APCA_API_SECRET_KEY: ${{ secrets.APCA_API_SECRET_KEY_RSI || secrets.APCA_API_SECRET_KEY }}
+
+      - name: Save the results
+        run: |
+          git config user.name "trading-bot"
+          git config user.email "actions@users.noreply.github.com"
+          git add backtest/results.json
+          git diff --cached --quiet || git commit -m "Backtest results"
+          git pull --rebase
+          git push
