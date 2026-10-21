@@ -1,7 +1,15 @@
 """
-Automated paper-trading bot for Alpaca (v7, multi-strategy edition).
+Automated paper-trading bot for Alpaca (v8, multi-strategy edition).
 
-File version: 7.0.0
+File version: 8.0.0
+  8.0.0: new strategies (TJR Liquidity Sweep, EMA + VWAP Trend) that put the whole
+         account into ONE position at a time across all stocks; entries are limit
+         orders that are cancelled if not filled within 90 seconds; every closed
+         trade carries an estimated cost, its risk and the reason it was taken;
+         a strategy pauses for the day after a run of losing trades; the daily
+         loss limit and early-close days are handled from Alpaca's own clock.
+         Also records the SPY price next to each account-value point so the
+         dashboard can show buy-and-hold for comparison.
   7.0.0: runs several strategies in ONE job, each on its own Alpaca paper
          account. Adds closed-trade tracking, end-of-day flattening, daily
          bars, a watchlist of 8 stocks, and a not-configured state so a
@@ -15,13 +23,16 @@ How it fits together:
   bot.py          this file: runs every strategy, places orders, records everything
   publisher.py    writes the dashboard's data files to the dashboard-data branch
   index.html      the dashboard website
-  config.json     the RSI Reversion settings, rewritten nightly by tune.py
+  config.json     the RSI Reversion settings (fixed; tune.py only suggests changes)
 
 Each strategy trades its own Alpaca paper account, with its own API keys:
 
   RSI Reversion            APCA_API_KEY_ID        APCA_API_SECRET_KEY
-  Opening Range Breakout   APCA_API_KEY_ID_ORB    APCA_API_SECRET_KEY_ORB
-  RSI(2) Pullback          APCA_API_KEY_ID_RSI2   APCA_API_SECRET_KEY_RSI2
+  TJR Liquidity Sweep      APCA_API_KEY_ID_TJR    APCA_API_SECRET_KEY_TJR
+  EMA + VWAP Trend         APCA_API_KEY_ID_TREND  APCA_API_SECRET_KEY_TREND
+
+(The workflow file maps your repo secrets onto these names, so the secrets
+themselves can be called anything; see .github/workflows/trading-bot.yml.)
 
 A strategy whose keys are missing is skipped and shown as "not connected" on
 the dashboard. Recording is best-effort: if anything in the dashboard code
@@ -47,7 +58,7 @@ except ImportError:
 
 from alpaca.trading.client import TradingClient
 from alpaca.trading.requests import (
-    MarketOrderRequest, GetOrdersRequest, StopLossRequest, TakeProfitRequest,
+    LimitOrderRequest, GetOrdersRequest, StopLossRequest, TakeProfitRequest,
 )
 from alpaca.trading.enums import OrderSide, TimeInForce, QueryOrderStatus, OrderClass
 from alpaca.data.historical import StockHistoricalDataClient
@@ -55,14 +66,14 @@ from alpaca.data.requests import StockBarsRequest
 from alpaca.data.timeframe import TimeFrame, TimeFrameUnit
 from alpaca.data.enums import DataFeed
 
-from strategies import ALL_STRATEGIES, Bar, Context, ET
+from strategies import ALL_STRATEGIES, Bar, Context, ET, MAX_RISK_PCT, trade_cost
 from publisher import Publisher, utc_now_iso
 
 # ---------------------------------------------------------------------------
 # Fixed configuration
 # ---------------------------------------------------------------------------
 
-VERSION = "7.0.0"
+VERSION = "8.0.0"
 
 # Every strategy watches these stocks. To give one strategy its own list, add
 # it below, for example:  WATCHLISTS = {"orb": ["SPY", "QQQ", "NVDA"]}
@@ -70,6 +81,7 @@ WATCHLIST = ["AAPL", "MSFT", "SPY", "QQQ", "NVDA", "TSLA", "AMD", "PLTR"]
 WATCHLISTS = {}
 
 MAX_DAILY_LOSS_PCT = 0.03   # stop opening new trades if today's drawdown hits 3% (per account)
+ENTRY_TIMEOUT_SECONDS = 90  # an entry order that has not filled by then is cancelled (the bot does not chase)
 LOOP_SECONDS = 60                # check every 60 seconds
 MAX_RUNTIME_MINUTES = 330        # stop before GitHub's 6-hour job limit
 MAX_WAIT_FOR_OPEN_MINUTES = 120  # if the market opens later than this, just exit
@@ -246,6 +258,9 @@ class Runner:
         self.last_log = {}         # symbol -> mono() of the last logged check
         self.cache = {}            # (key, symbol) -> (mono, bars)
         self.market = {}
+        self.candidates = []       # entry signals found in this pass (one-position strategies pick the best)
+        self.busy_with = None      # the stock a one-position strategy is already in (or entering)
+        self.halt_text = None      # why new trades are paused right now, if they are
 
     # ----------------------------------------------------------------- setup
 
@@ -253,14 +268,18 @@ class Runner:
         path = "config.json" if self.id == "rsi-reversion" else f"config_{self.id}.json"
         try:
             with open(path) as f:
-                return {**self.s.default_params, **json.load(f)}
+                params = {**self.s.default_params, **json.load(f)}
         except FileNotFoundError:
             if self.id == "rsi-reversion":
                 log.warning(f"Could not find {path}; using defaults for {self.id}.")
-            return dict(self.s.default_params)
+            params = dict(self.s.default_params)
         except Exception as e:
             log.warning(f"Could not read {path} ({e}); using defaults for {self.id}.")
-            return dict(self.s.default_params)
+            params = dict(self.s.default_params)
+        if "risk_per_trade_pct" in params:
+            # A hard ceiling: whatever a settings file says, no trade risks more than MAX_RISK_PCT of the account.
+            params["risk_per_trade_pct"] = max(0.0, min(float(params["risk_per_trade_pct"]), MAX_RISK_PCT))
+        return params
 
     def set_state(self, state, message=""):
         self.bot["state"] = state
@@ -307,7 +326,7 @@ class Runner:
         return any(_aware(o.submitted_at) >= cutoff for o in self.trading.get_orders(req))
 
     def enter(self, symbol, d, equity):
-        """Place a bracket order (entry + stop-loss + take-profit) and record the attempt."""
+        """Place a bracket order (limit entry + stop-loss + take-profit) and record the attempt."""
         self.last_attempt[symbol] = mono()
         attempts = self.saved.setdefault("attempts", [])
         if symbol not in attempts:
@@ -315,24 +334,29 @@ class Runner:
 
         price, direction = d.price, d.signal
         qty = self.s.position_size(equity, price, d, self.params, len(self.symbols))
+        offset = float(self.params.get("entry_offset_pct", 0.0005))
+        limit_price = round(price * (1 + offset), 2) if direction == "long" else round(price * (1 - offset), 2)
         base = {
             "t": iso_now(), "symbol": symbol, "direction": direction, "kind": "entry",
             "side": "buy" if direction == "long" else "sell",
-            "qty": qty, "ref_price": round(price, 2), "reason": d.reason,
+            "qty": qty, "ref_price": round(price, 2), "limit_price": limit_price, "reason": d.reason,
             "stop_price": d.stop_price, "take_profit_price": d.take_profit_price,
         }
 
         if qty <= 0:
             msg = "The position size rounds down to 0 shares at this price."
             self.store.append_jsonl("orders.jsonl", {**base, "status": "not_placed", "message": msg})
+            self.release_attempt(symbol)
             return "not_placed", msg
 
         try:
-            order = self.trading.submit_order(MarketOrderRequest(
+            order = self.trading.submit_order(LimitOrderRequest(
                 symbol=symbol,
                 qty=qty,
                 side=OrderSide.BUY if direction == "long" else OrderSide.SELL,
-                time_in_force=TimeInForce.GTC,   # keeps the stop-loss/take-profit alive overnight
+                limit_price=limit_price,
+                # "gtc" keeps the stop-loss/take-profit alive overnight; same-day strategies use "day".
+                time_in_force=TimeInForce.DAY if self.s.entry_tif == "day" else TimeInForce.GTC,
                 order_class=OrderClass.BRACKET,
                 stop_loss=StopLossRequest(stop_price=d.stop_price),
                 take_profit=TakeProfitRequest(limit_price=d.take_profit_price),
@@ -341,6 +365,7 @@ class Runner:
             msg = str(e)[:300]
             self.store.append_jsonl("orders.jsonl", {**base, "status": "rejected", "message": msg})
             notify(f"[{self.s.name}] Order rejected: {direction.upper()} {symbol} x{qty}. {msg}")
+            self.release_attempt(symbol)
             return "order_rejected", msg
 
         order_id = str(_g(order, "id"))
@@ -350,12 +375,58 @@ class Runner:
         })
         # A note so the trade is recorded even if it opens and closes between two checks.
         self.saved.setdefault("positions", {})[symbol] = {
-            "opened_at": iso_now(), "side": direction, "qty": qty, "entry": price,
-            "pending": True, "order_id": order_id,
+            "opened_at": iso_now(), "submitted_at": iso_now(), "side": direction, "qty": qty, "entry": price,
+            "pending": True, "order_id": order_id, "stop": d.stop_price, "target": d.take_profit_price,
+            "why": d.reason, "setup": d.setup or None,
         }
-        notify(f"[{self.s.name}] {direction.upper()} {symbol} x{qty} @ ~${price:.2f} "
+        notify(f"[{self.s.name}] {direction.upper()} {symbol} x{qty} @ limit ${limit_price:.2f} "
                f"(stop ${d.stop_price}, target ${d.take_profit_price})")
-        return "order_submitted", f"Bracket order sent for {qty} shares."
+        return "order_submitted", f"Limit order sent for {qty} shares at ${limit_price:.2f}."
+
+    def release_attempt(self, symbol):
+        """An order that was rejected or never filled does not use up a "one entry per stock per day" allowance."""
+        attempts = self.saved.get("attempts", [])
+        if symbol in attempts:
+            attempts.remove(symbol)
+
+    OPEN_STATUSES = {"new", "accepted", "pending_new", "partially_filled", "accepted_for_bidding", "pending_replace"}
+
+    def cancel_stale_entries(self):
+        """
+        Cancel entry orders that have not filled within ENTRY_TIMEOUT_SECONDS. A real trader would rather
+        miss a trade than chase a fast move, and a missed fill shows up honestly on the dashboard.
+        Returns the set of symbols whose entry was cancelled.
+        """
+        cancelled = set()
+        for sym, rec in list(self.saved.get("positions", {}).items()):
+            if not rec.get("pending") or not rec.get("order_id"):
+                continue
+            try:
+                age = (now_utc() - _aware(rec.get("submitted_at") or rec["opened_at"])).total_seconds()
+            except Exception:
+                continue
+            if age < ENTRY_TIMEOUT_SECONDS:
+                continue
+            try:
+                o = self.trading.get_order_by_id(rec["order_id"])
+                if str(_val(_g(o, "status"))) not in self.OPEN_STATUSES:
+                    continue
+                self.trading.cancel_order_by_id(rec["order_id"])
+            except Exception as e:
+                log.warning(f"[{self.id}] {sym}: could not cancel the unfilled entry order: {e}")
+                continue
+            filled = _f(_g(o, "filled_qty"), 0.0) or 0.0
+            msg = (f"Not filled within {ENTRY_TIMEOUT_SECONDS} seconds, so the order was cancelled. "
+                   "The bot does not chase fast moves.")
+            self.store.append_jsonl("orders.jsonl", {
+                "t": iso_now(), "symbol": sym, "direction": "cancel", "kind": "cancel", "side": None,
+                "qty": rec.get("qty"), "reason": msg, "message": msg, "status": "submitted"})
+            notify(f"[{self.s.name}] {sym}: entry not filled in {ENTRY_TIMEOUT_SECONDS}s, cancelled.")
+            cancelled.add(sym)
+            if filled <= 0:
+                del self.saved["positions"][sym]      # nothing was bought, so there is no trade to track
+                self.release_attempt(sym)
+        return cancelled
 
     def exit_symbol(self, symbol, reason, pos):
         """Cancel the protective orders on a position, then close it at the market."""
@@ -421,7 +492,8 @@ class Runner:
             except Exception:
                 entry_date = None
         return {"side": str(_val(_g(pos, "side"))), "qty": abs(_f(_g(pos, "qty"), 0.0)),
-                "avg_entry_price": _f(_g(pos, "avg_entry_price")), "entry_date": entry_date}
+                "avg_entry_price": _f(_g(pos, "avg_entry_price")), "entry_date": entry_date,
+                "opened_at": rec.get("opened_at") if rec else None}
 
     def track_trades(self, positions, open_symbols):
         """Compare the positions held now with the last pass; log a closed trade for each one that went away."""
@@ -449,8 +521,23 @@ class Runner:
                 trade = None
             if trade:
                 self.store.append_jsonl("trades.jsonl", trade)
+                self.note_trade_result(trade)
                 notify(f"[{self.s.name}] Closed {sym} {trade['side']}: "
                        f"{'+' if trade['pnl'] >= 0 else '-'}${abs(trade['pnl']):,.2f} ({trade['exit_kind']})")
+
+    def note_trade_result(self, trade):
+        """Count losing trades in a row today (a win resets the count)."""
+        today = self.saved.get("day")
+        streak = self.saved.setdefault("streak", {})
+        if streak.get("day") != today:
+            streak.clear()
+            streak.update(day=today, losses=0)
+        streak["losses"] = streak["losses"] + 1 if trade["pnl"] < 0 else 0
+
+    def streak_paused(self):
+        limit = self.s.loss_streak_limit
+        streak = self.saved.get("streak") or {}
+        return bool(limit) and streak.get("day") == self.saved.get("day") and streak.get("losses", 0) >= limit
 
     def build_trade(self, sym, rec):
         opp = "sell" if rec["side"] == "long" else "buy"
@@ -485,16 +572,26 @@ class Runner:
         qty = rec.get("qty") or 0
         sign = 1 if rec["side"] == "long" else -1
         pnl = (exit_price - entry) * qty * sign
+        cost = trade_cost(rec["side"], qty, entry, exit_price, kind)
+        stop = rec.get("stop")
+        risk = abs(entry - stop) * qty if stop else None
         return {
             "t": t_close.isoformat(timespec="seconds"), "opened_at": rec["opened_at"], "symbol": sym,
             "side": rec["side"], "qty": qty, "entry": round(entry, 2), "exit": round(exit_price, 2),
             "pnl": round(pnl, 2), "pnl_pct": round(sign * (exit_price / entry - 1) * 100, 3) if entry else None,
             "exit_kind": kind,
+            # what a real account would likely have given up (slippage and fees), and the result after it
+            "cost": cost, "pnl_net": round(pnl - cost, 2),
+            # how much the trade risked, and the result in multiples of that risk
+            "risk": round(risk, 2) if risk else None, "r": round(pnl / risk, 2) if risk else None,
+            "stop": stop, "target": rec.get("target"),
+            "held_min": round((t_close - opened).total_seconds() / 60, 1),
+            "why": rec.get("why"), "setup": rec.get("setup"),
         }
 
     # ------------------------------------------------------------- one pass
 
-    def check_symbol(self, symbol, clk, equity, positions, open_symbols, halted, no_entries):
+    def check_symbol(self, symbol, clk, equity, positions, open_symbols, halt_reason, no_entries):
         pos = positions.get(symbol)
         ctx = Context(
             now_et=clk.now_et, minutes_to_close=clk.minutes_to_close, equity=equity,
@@ -523,12 +620,14 @@ class Runner:
             blocker = None
             if not d.actionable:
                 blocker = d.window_note or "Outside this strategy's trading window"
-            elif halted:
-                blocker = "Daily loss limit reached, no new trades today"
+            elif halt_reason:
+                blocker = halt_reason
             elif no_entries:
                 blocker = "Too close to the market close for new entries"
             elif symbol in positions:
                 blocker = "Already holding a position in this stock"
+            elif self.s.single_position and self.busy_with:
+                blocker = f"Only one position at a time, and the account is already in {self.busy_with}"
             elif symbol in open_symbols:
                 blocker = "An earlier order is still pending"
             elif self.s.one_entry_per_day and symbol in self.saved.get("attempts", []):
@@ -539,10 +638,17 @@ class Runner:
             if blocker:
                 d.checks.append({"label": blocker, "ok": False})
                 action, detail = "skipped", blocker
+            elif self.s.single_position:
+                # Wait until every stock has been checked, then take the best setup (see resolve_candidates).
+                self.candidates.append((symbol, d))
+                return
             else:
                 d.checks.append({"label": "No open position or pending order", "ok": True})
                 action, detail = self.enter(symbol, d, equity)
 
+        self.record(symbol, d, action, detail)
+
+    def record(self, symbol, d, action, detail):
         due = mono() - self.last_log.get(symbol, -1e9) >= self.s.log_every_seconds - 5
         if action != "none" or due:
             self.last_log[symbol] = mono()
@@ -553,6 +659,27 @@ class Runner:
                 "checks": d.checks, "action": action, "detail": detail,
             })
         log.info(f"[{self.id}] {symbol}: {d.signal} | {d.reason}" + (f" -> {action}" if action != "none" else ""))
+
+    def resolve_candidates(self, equity):
+        """One-position strategies: of every stock that signalled this pass, take the highest-scoring one."""
+        cands, self.candidates = self.candidates, []
+        if not cands:
+            return
+        cands.sort(key=lambda c: -c[1].score)
+        winner = None
+        for sym, d in cands:
+            if winner is not None:
+                msg = f"Another stock had a stronger setup ({winner}). Only one position at a time."
+                d.checks.append({"label": msg, "ok": False})
+                self.record(sym, d, "skipped", msg)
+                continue
+            d.checks.append({"label": "No open position or pending order", "ok": True})
+            if len(cands) > 1:
+                d.checks.append({"label": f"Strongest of {len(cands)} setups this minute", "ok": True})
+            action, detail = self.enter(sym, d, equity)
+            self.record(sym, d, action, detail)
+            if action == "order_submitted":
+                winner = sym
 
     def tick(self, clk):
         """One pass while the market is open."""
@@ -567,25 +694,38 @@ class Runner:
         open_symbols = {o.symbol for o in self.trading.get_orders(
             GetOrdersRequest(status=QueryOrderStatus.OPEN, limit=100))}
         self.track_trades(positions, open_symbols)
+        open_symbols -= self.cancel_stale_entries()
 
         last_equity = float(account.last_equity)
         if (not self.halted_today and last_equity
                 and (last_equity - equity) / last_equity >= MAX_DAILY_LOSS_PCT):
             self.halted_day = today
             notify(f"[{self.s.name}] Daily loss limit hit: no new trades for the rest of today.")
-        halted = self.halted_today
+        halt_reason = None
+        if self.halted_today:
+            halt_reason = f"Daily loss limit of {MAX_DAILY_LOSS_PCT * 100:.0f}% reached. No new trades today."
+        elif self.streak_paused():
+            halt_reason = f"{self.s.loss_streak_limit} losing trades in a row, so no new trades for the rest of today. Trading resumes tomorrow."
+            if self.halt_text != halt_reason:
+                notify(f"[{self.s.name}] {halt_reason}")
+        self.halt_text = halt_reason
 
         mtc = clk.minutes_to_close
         fm = self.s.flatten_minutes_before_close
         no_entries = fm is not None and mtc is not None and mtc <= fm
-        if no_entries and self.saved.get("flattened_day") != today:
+        if no_entries and (self.saved.get("flattened_day") != today or positions):
             if self.flatten_all(positions, clk):
                 positions = {}
+
+        # A one-position strategy is "busy" while it holds a stock or has an entry order working.
+        self.busy_with = next(iter(positions), None) or next(
+            (s for s, r in self.saved.get("positions", {}).items() if r.get("pending")), None)
+        self.candidates = []
 
         failures, last_error = 0, None
         for symbol in self.symbols:
             try:
-                self.check_symbol(symbol, clk, equity, positions, open_symbols, halted, no_entries)
+                self.check_symbol(symbol, clk, equity, positions, open_symbols, halt_reason, no_entries)
             except Exception as e:
                 failures += 1
                 last_error = e
@@ -595,13 +735,15 @@ class Runner:
                     "signal": "error", "reason": f"The check failed: {str(e)[:200]}",
                     "checks": [], "action": "none", "detail": None,
                 })
+        if failures < len(self.symbols):
+            self.resolve_candidates(equity)
         self.save_state()
         if failures == len(self.symbols):
             # Count this as a failed pass so repeated outages stop this strategy and alert you.
             raise RuntimeError(f"Every symbol check failed. Last error: {last_error}")
 
-        if halted:
-            self.set_state("halted", f"Daily loss limit of {MAX_DAILY_LOSS_PCT * 100:.0f}% reached. No new trades today.")
+        if halt_reason:
+            self.set_state("halted", halt_reason)
         else:
             self.set_state("running", "Checking the market.")
 
@@ -614,6 +756,8 @@ class Runner:
         d["settings"] = [
             {"label": "Max daily loss", "display": f"{MAX_DAILY_LOSS_PCT * 100:.1f}%",
              "hint": "New trades stop for the day if the account falls this far"},
+            {"label": "Costs on the dashboard", "display": "Estimated",
+             "hint": "Closed trades also show a result after estimated slippage and fees, because paper fills are cleaner than real ones"},
             {"label": "Check interval", "display": f"{LOOP_SECONDS} sec",
              "hint": "How often the bot looks at the market"},
         ] + self.s.settings(self.params, len(self.symbols))
@@ -689,13 +833,22 @@ class Runner:
                 GetOrdersRequest(status=QueryOrderStatus.OPEN, limit=50))], []),
             "recent_orders": _safe(lambda: [self._order_dict(o) for o in t.get_orders(
                 GetOrdersRequest(status=QueryOrderStatus.ALL, limit=60))], []),
-            "tuning": ({"last_tuned": self.params.get("last_tuned"),
-                        "backtest_return_pct": self.params.get("backtest_return_pct")}
-                       if self.id == "rsi-reversion" else None),
+            "tuning": self.tuning_info() if self.id == "rsi-reversion" else None,
         })
         return base
 
-    def write_status(self, final=False):
+    def tuning_info(self):
+        """The nightly tuner only SUGGESTS settings (tuning_suggestion.json); it never changes config.json."""
+        info = {"last_tuned": self.params.get("last_tuned"), "backtest_return_pct": self.params.get("backtest_return_pct"),
+                "suggest_only": True, "suggestion": None}
+        try:
+            with open("tuning_suggestion.json") as f:
+                info["suggestion"] = json.load(f)
+        except Exception:
+            pass
+        return info
+
+    def write_status(self, final=False, benchmark=None):
         """Write the latest snapshot and an account-value point. Never raises."""
         try:
             status = self.build_status()
@@ -707,6 +860,8 @@ class Runner:
                 closing = final and self.bot["passes"] > 0
                 if first_point or running or closing:
                     self.store.append_equity(status["updated_at"], equity)
+                    if benchmark:
+                        self.store.append_benchmark(status["updated_at"], benchmark)
         except Exception:
             log.warning(f"[{self.id}] Dashboard update failed (trading is not affected).", exc_info=True)
 
@@ -718,14 +873,29 @@ class Runner:
 LAST_PUSH = {"t": None}
 
 
+def benchmark_price(runners):
+    """The latest SPY price (one small request), so the dashboard can show buy-and-hold next to the strategies."""
+    try:
+        for r in runners:
+            if r.configured and r.data is not None:
+                bars = fetch_bars(r.data, "SPY", TIMEFRAMES["1Min"], now_utc() - timedelta(minutes=45))
+                if bars:
+                    return bars[-1].c
+                return None
+    except Exception:
+        log.info("Could not read the SPY benchmark price (trading is not affected).")
+    return None
+
+
 def publish_all(pub, runners, final=False):
     """Every few minutes (and at the end), write every strategy's snapshot and push it. Never raises."""
     try:
         due = final or LAST_PUSH["t"] is None or mono() - LAST_PUSH["t"] >= PUBLISH_EVERY_SECONDS
         if not due:
             return
+        bench = benchmark_price(runners)
         for r in runners:
-            r.write_status(final=final)
+            r.write_status(final=final, benchmark=bench)
         if pub.push():
             LAST_PUSH["t"] = mono()
     except Exception:
@@ -850,8 +1020,8 @@ def main_loop() -> None:
         for r in active:
             if r.stopped:
                 r.set_state("error", r.final_message or "Stopped.")
-            elif r.halted_today:
-                r.set_state("halted", f"Daily loss limit of {MAX_DAILY_LOSS_PCT * 100:.0f}% reached. No new trades today.")
+            elif r.halt_text:
+                r.set_state("halted", r.halt_text)
             else:
                 r.set_state(final_state, final_message)
             r.save_state()

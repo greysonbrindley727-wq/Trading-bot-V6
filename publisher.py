@@ -1,7 +1,8 @@
 """
 Writes the files the dashboard reads, and publishes them to a git branch.
 
-File version: 2.0.0
+File version: 2.1.0
+  2.1.0: stores can also keep benchmark.csv (the SPY price at each account-value point).
   2.0.0: one Publisher now serves several strategies (a store per strategy),
          and stores can keep a small state file between runs.
   1.0.0: single strategy.
@@ -11,6 +12,7 @@ Files (one folder per strategy):
     strategies.json                    list of strategies, for the dashboard's switcher
     <strategy-id>/status.json          latest snapshot: account, positions, orders, bot health
     <strategy-id>/equity.csv           account value over time
+    <strategy-id>/benchmark.csv        SPY price at the same moments (for the buy-and-hold comparison)
     <strategy-id>/decisions.jsonl      every check the bot ran, and why
     <strategy-id>/orders.jsonl         every order the bot placed or tried to place
     <strategy-id>/trades.jsonl         every closed trade, with its profit or loss
@@ -79,6 +81,16 @@ class StrategyStore:
             if is_new:
                 w.writerow(["t", "equity"])
             w.writerow([timestamp_iso, f"{equity:.2f}"])
+
+    def append_benchmark(self, timestamp_iso, price):
+        """The price of the benchmark (SPY) at the same moments as the account value, for the Compare chart."""
+        path = self.dir / "benchmark.csv"
+        is_new = not path.exists() or path.stat().st_size == 0
+        with open(path, "a", newline="", encoding="utf-8") as f:
+            w = csv.writer(f)
+            if is_new:
+                w.writerow(["t", "price"])
+            w.writerow([timestamp_iso, f"{price:.2f}"])
 
     def equity_rows(self) -> int:
         path = self.dir / "equity.csv"

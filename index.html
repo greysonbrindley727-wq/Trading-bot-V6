@@ -1,5 +1,5 @@
 <!doctype html>
-<!-- File version: 2.0.0 -->
+<!-- File version: 3.0.0 -->
 <html lang="en">
 <head>
 <meta charset="utf-8">
@@ -204,8 +204,8 @@ details.data summary { cursor: pointer; color: var(--ink-2); font-size: 12px; }
 .rules li { margin: 3px 0; }
 .kv { width: 100%; border-collapse: collapse; }
 .kv th, .kv td { padding: 6px 0; border-bottom: 1px solid var(--grid); text-align: left; vertical-align: top; }
-.kv th { font-weight: 400; color: var(--ink-2); padding-right: 12px; }
-.kv td { font-weight: 500; white-space: nowrap; }
+.kv th { font-weight: 400; color: var(--ink-2); padding-right: 12px; width: 44%; }
+.kv td { font-weight: 500; overflow-wrap: anywhere; }
 .kv .hint { display: block; font-weight: 400; color: var(--ink-3); font-size: 11px; white-space: normal; }
 .syms { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
 .sym-chip { font-family: var(--mono); font-size: 12px; background: var(--raised); border-radius: 4px; padding: 2px 7px; }
@@ -266,6 +266,7 @@ table.t tbody tr:last-child td { border-bottom: 0; }
 .viewbar-in #health { flex: none; }
 .swatch { display: inline-block; flex: none; width: 18px; height: 3px; border-radius: 2px; background: var(--c, var(--accent)); }
 .swatch.dot { width: 10px; height: 10px; border-radius: 50%; }
+.swatch.dashed { height: 0; background: none; border-top: 3px dashed var(--c, var(--ink-3)); border-radius: 0; }
 .topbar { background: var(--page); }
 @media (max-width: 560px) { .viewbar-in #health { display: none; } }
 
@@ -293,6 +294,16 @@ table.cmp { max-width: 860px; }
 .cmp td.rowh { color: var(--ink-2); white-space: normal; min-width: 96px; }
 .cmp td.rowh .hint { display: block; color: var(--ink-3); font-size: 11px; }
 .cmp td.na { color: var(--ink-3); }
+.tdet summary { cursor: pointer; color: var(--accent); font-size: 12px; white-space: nowrap; }
+.tdet-body { margin-top: 6px; min-width: 250px; max-width: 440px; white-space: normal; }
+.tdet-body .why-text { color: var(--ink-2); font-size: 12.5px; margin-bottom: 6px; }
+.tdet-body table.kv td { white-space: normal; font-weight: 400; padding: 3px 0; }
+.tdet-body table.kv th { padding: 3px 12px 3px 0; }
+.note { color: var(--ink-2); font-size: 12px; margin-top: 8px; }
+.row-tools { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 16px; margin-bottom: 10px; }
+.sugg { display: grid; gap: 12px; grid-template-columns: repeat(auto-fit, minmax(min(100%, 280px), 1fr)); margin-bottom: 12px; }
+.sugg > div { border: 1px solid var(--border); border-radius: 8px; padding: 12px; background: var(--surface); min-width: 0; }
+.faded { color: var(--loss-text); font-weight: 500; }
 .setup-steps { margin: 8px 0 0; padding-left: 20px; color: var(--ink-2); }
 .setup-steps li { margin: 4px 0; }
 .code { font-family: var(--mono); font-size: 12px; background: var(--raised); border-radius: 4px; padding: 1px 6px; white-space: nowrap; }
@@ -464,23 +475,33 @@ async function loadLive() {
   const idx = await getJSON(DATA_BASE + "/strategies.json");
   const list = idx.strategies || [];
   if (!list.length) throw new Error("strategies.json has no strategies yet");
-  if (ui.view === "compare" ? list.length < 2 : !list.some((s) => s.id === ui.view)) ui.view = list.length > 1 ? "compare" : list[0].id;
+  const okView = ui.view === "backtest" || (ui.view === "compare" ? list.length > 1 : list.some((s) => s.id === ui.view));
+  if (!okView) ui.view = list.length > 1 ? "compare" : list[0].id;
   const byId = {};
   await Promise.all(list.map(async (meta) => {
     const base = DATA_BASE + "/" + encodeURIComponent(meta.id);
     const detail = ui.view === meta.id, on = meta.configured !== false;   // a strategy with no keys has only a status file
-    const [status, equity, trades, decisions, orders] = await Promise.all([
+    const [status, equity, trades, decisions, orders, benchmark] = await Promise.all([
       getJSON(base + "/status.json").catch((e) => { if (detail) throw e; return null; }),
       on ? getText(base + "/equity.csv").then(parseEquity).catch(() => []) : [],
       on ? getText(base + "/trades.jsonl").then(parseJSONL).catch(() => []) : [],
       on && detail ? getText(base + "/decisions.jsonl").then(parseJSONL).catch(() => []) : [],
       on && detail ? getText(base + "/orders.jsonl").then(parseJSONL).catch(() => []) : [],
+      on ? getText(base + "/benchmark.csv").then(parseEquity).catch(() => []) : [],
     ]);
-    byId[meta.id] = { meta, status: status || emptyStatus(meta, "This strategy has not published anything yet."), equity, trades: trades.sort((a, b) => Date.parse(a.t) - Date.parse(b.t)), decisions, orders, demo: false, tuning: [] };
+    byId[meta.id] = { meta, status: status || emptyStatus(meta, "This strategy has not published anything yet."), equity, trades: trades.sort((a, b) => Date.parse(a.t) - Date.parse(b.t)), decisions, orders, benchmark, demo: false, tuning: [] };
   }));
   const tuning = await getText(MAIN_BASE + "/tuning_log.csv").then(parseCSV).catch(() => []);
   if (byId["rsi-reversion"]) byId["rsi-reversion"].tuning = tuning;
-  return { strategies: list, byId, demo: false, loadedAt: Date.now() };
+  // SPY buy-and-hold: every strategy records the same series, so use the longest one
+  const benchmark = Object.values(byId).map((e) => e.benchmark || []).reduce((a, b) => (b.length > a.length ? b : a), []);
+  // the backtest file is large and changes rarely, so keep it for ten minutes
+  let backtest = null;
+  if (ui.view === "backtest") {
+    if (backtestCache && Date.now() - backtestCache.at < 600000) backtest = backtestCache.data;
+    else { backtest = await getJSON(MAIN_BASE + "/backtest/results.json").catch(() => null); backtestCache = { at: Date.now(), data: backtest }; }
+  }
+  return { strategies: list, byId, benchmark, backtest, demo: false, loadedAt: Date.now() };
 }
 
 /* ======================= sample data ======================= */
@@ -500,14 +521,22 @@ function etToMs(y, mo, d, hh, mm) {
   return guess;
 }
 
-const DEMO_DESC = {"rsi-reversion":{"id":"rsi-reversion","name":"RSI Reversion","description":"Bets that a sharp drop or spike on the 1-minute chart will snap back. It goes long when RSI falls to the oversold level and short when RSI rises to the overbought level. Every entry comes with its own stop-loss and take-profit, which Alpaca manages.","kind":"intraday","timeframe":"1-minute bars","schedule":"Checks every minute while the market is open.","rules":["Go long when RSI(14) falls to 30 or lower.","Go short when RSI(14) rises to 70 or higher.","Each entry gets a stop-loss 0.40% away and a take-profit 0.80% away.","Only one position per stock at a time. The stop-loss or take-profit closes it."],"params":[{"key":"rsi_period","label":"RSI period","display":"14 bars","hint":"How many 1-minute bars RSI looks back over"},{"key":"rsi_oversold","label":"Oversold level","display":"30","hint":"RSI at or below this triggers a long"},{"key":"rsi_overbought","label":"Overbought level","display":"70","hint":"RSI at or above this triggers a short"},{"key":"stop_loss_pct","label":"Stop-loss","display":"0.40%","hint":"Distance from entry where the position is closed at a loss"},{"key":"take_profit_pct","label":"Take-profit","display":"0.80%","hint":"Distance from entry where the position is closed at a gain"}],"indicators":[{"key":"rsi","label":"RSI (14)","decimals":1,"range":[0,100],"zone":"outside","spark":true,"marks":[{"value":30,"label":"Oversold"},{"value":70,"label":"Overbought"}]}],"symbols":["AAPL","MSFT","SPY","QQQ","NVDA","TSLA","AMD","PLTR"],"configured":true,"settings":[{"label":"Max daily loss","display":"3.0%","hint":"New trades stop for the day if the account falls this far"},{"label":"Check interval","display":"60 sec","hint":"How often the bot looks at the market"},{"label":"Position size","display":"12.5% of the account","hint":"Per stock, rounded down to whole shares"},{"label":"Cooldown","display":"5 min","hint":"Minimum gap between order attempts in one stock"}]},"orb":{"id":"orb","name":"Opening Range Breakout","description":"Looks at the first 5-minute candle of the day. If it closed up, the bot goes long; if it closed down, it goes short. The stop-loss sits at the other end of that candle, and everything is closed shortly before the market closes. It only trades stocks whose opening volume is at least normal, because the idea works best on busy days.","kind":"intraday","timeframe":"5-minute bars","schedule":"Looks at the first candle at 9:35 AM ET, may enter until 9:50 AM ET, and closes everything 5 minutes before the close.","rules":["If the first 5-minute candle (9:30 to 9:35 AM ET) closed up, go long. If it closed down, go short.","Only trade a stock when its opening volume is at least 1.0x its recent average.","The stop-loss goes at the low (long) or high (short) of that first candle.","The take-profit is 10 times the risk away, so most trades end at the close instead.","Close every position 5 minutes before the market closes. One trade per stock per day."],"params":[{"key":"min_rel_volume","label":"Minimum opening volume","display":"1.0x","hint":"Compared with the average opening volume of recent sessions"},{"key":"rel_volume_days","label":"Average over","display":"14 sessions","hint":"How many past days make up the volume average"},{"key":"entry_window_minutes","label":"Entry window","display":"15 min","hint":"How long after the first candle the bot may still enter"},{"key":"target_r","label":"Take-profit","display":"10x the risk","hint":"Distance of the profit target, as a multiple of the stop distance"},{"key":"risk_per_trade_pct","label":"Risk per trade","display":"0.50%","hint":"Share of the account lost if the stop-loss is hit"}],"indicators":[{"key":"rel_vol","label":"Opening volume vs average","decimals":2,"range":[0,3],"zone":"above","marks":[{"value":1.0,"label":"Minimum"}]},{"key":"range_pct","label":"Opening candle size (% of price)","decimals":2,"range":[0,2],"zone":"between","marks":[{"value":0.05,"label":"Min"},{"value":1.5,"label":"Max"}]}],"symbols":["AAPL","MSFT","SPY","QQQ","NVDA","TSLA","AMD","PLTR"],"configured":true,"settings":[{"label":"Max daily loss","display":"3.0%","hint":"New trades stop for the day if the account falls this far"},{"label":"Check interval","display":"60 sec","hint":"How often the bot looks at the market"},{"label":"Risk per trade","display":"0.50% of the account","hint":"How much the account loses if the stop-loss is hit"},{"label":"Largest position","display":"25% of the account","hint":"Caps the size when the stop is very close"},{"label":"Entry window","display":"9:35 AM to 9:50 AM ET","hint":"The bot only enters during this time"},{"label":"Closes everything","display":"5 min before the close","hint":"No positions are held overnight"}]},"rsi2-swing":{"id":"rsi2-swing","name":"RSI(2) Pullback","description":"Buys short, sharp dips in stocks that are in a longer uptrend. When a stock closes far below where it was two days ago while still trading above its 200-day average, the bot buys it and sells once the price recovers above its 5-day average. Trades last a few days.","kind":"swing","timeframe":"Daily bars","schedule":"Checks once near the close each day (last 15 minutes). Long only.","rules":["Buy when the price is above its 200-day average and RSI(2) closes below 10.","Sell when the price closes above its 5-day average.","Sell anyway after 7 trading days.","A wide safety stop-loss (8% away) and take-profit (20% away) protect against a crash.","Long only. One position per stock. Trades are rare, a few a month across the watchlist."],"params":[{"key":"rsi_period","label":"RSI period","display":"2 days","hint":"A very short RSI that reacts to a 2-day drop"},{"key":"entry_rsi","label":"Buy when RSI below","display":"10","hint":"How sharp the dip has to be"},{"key":"trend_sma","label":"Uptrend filter","display":"200-day average","hint":"Only buy dips in stocks trading above this"},{"key":"exit_sma","label":"Sell above","display":"5-day average","hint":"Sell when the price closes above this"},{"key":"max_hold_days","label":"Longest hold","display":"7 days","hint":"Time limit if the price never recovers"},{"key":"stop_loss_pct","label":"Safety stop-loss","display":"8%","hint":"Only for disasters"}],"indicators":[{"key":"rsi2","label":"RSI (2)","decimals":1,"range":[0,100],"zone":"below","marks":[{"value":10,"label":"Buy below"}]},{"key":"vs_sma200","label":"Price vs 200-day average (%)","decimals":1,"range":[-20,20],"zone":"above","marks":[{"value":0,"label":"Uptrend above"}]}],"symbols":["AAPL","MSFT","SPY","QQQ","NVDA","TSLA","AMD","PLTR"],"configured":true,"settings":[{"label":"Max daily loss","display":"3.0%","hint":"New trades stop for the day if the account falls this far"},{"label":"Check interval","display":"60 sec","hint":"How often the bot looks at the market"},{"label":"Position size","display":"12.5% of the account","hint":"Per stock, rounded down to whole shares"},{"label":"Order window","display":"Last 15 min of the day","hint":"Buys and sells happen shortly before the close, using the day's price so far"},{"label":"Longest hold","display":"7 trading days","hint":"The bot sells after this long even if the price has not recovered"}]}};
+const DEMO_DESC = {"rsi-reversion":{"id":"rsi-reversion","name":"RSI Reversion","description":"Bets that a sharp drop or spike on the 1-minute chart will snap back. It goes long when RSI falls to the oversold level and short when RSI rises to the overbought level. Every entry comes with its own stop-loss and take-profit, which Alpaca manages.","kind":"intraday","timeframe":"1-minute bars","schedule":"Checks every minute while the market is open.","rules":["Go long when RSI(14) falls to 30 or lower.","Go short when RSI(14) rises to 70 or higher.","Each entry gets a stop-loss 0.40% away and a take-profit 0.80% away.","Only one position per stock at a time. The stop-loss or take-profit closes it."],"params":[{"key":"rsi_period","label":"RSI period","display":"14 bars","hint":"How many 1-minute bars RSI looks back over"},{"key":"rsi_oversold","label":"Oversold level","display":"30","hint":"RSI at or below this triggers a long"},{"key":"rsi_overbought","label":"Overbought level","display":"70","hint":"RSI at or above this triggers a short"},{"key":"stop_loss_pct","label":"Stop-loss","display":"0.40%","hint":"Distance from entry where the position is closed at a loss"},{"key":"take_profit_pct","label":"Take-profit","display":"0.80%","hint":"Distance from entry where the position is closed at a gain"}],"indicators":[{"key":"rsi","label":"RSI (14)","decimals":1,"range":[0,100],"zone":"outside","spark":true,"marks":[{"value":30,"label":"Oversold"},{"value":70,"label":"Overbought"}]}],"settings":[{"label":"Max daily loss","display":"3.0%","hint":"New trades stop for the day if the account falls this far"},{"label":"Check interval","display":"60 sec","hint":"How often the bot looks at the market"},{"label":"Position size","display":"12.5% of the account","hint":"Per stock, rounded down to whole shares"},{"label":"Cooldown","display":"5 min","hint":"Minimum gap between order attempts in one stock"},{"label":"Entry order","display":"Limit order just past the price","hint":"A limit order a few hundredths of a percent beyond the last price. It is cancelled if it has not filled within 90 seconds, so the bot never chases a fast move"}],"symbols":["AAPL","MSFT","SPY","QQQ","NVDA","TSLA","AMD","PLTR"],"configured":true},"tjr-sweep":{"id":"tjr-sweep","name":"TJR Liquidity Sweep","description":"A rule-based version of the popular liquidity sweep and fair value gap style. Traders say stop-losses pile up just beyond obvious highs and lows, and that price often runs those levels and then reverses. The bot waits for price to run the previous day's high or low (or a high or low from earlier today) and snap back, for the 5-minute chart to shift structure the other way, and for price to pull back into a gap on the 1-minute chart. Then it trades in the new direction with the stop beyond the sweep. The whole account goes into one position at a time, and each trade is closed within the hour. This is an automated approximation of a style that is normally traded by eye, so the results say whether this version works, not the whole idea.","kind":"intraday","timeframe":"1-minute entries, 5-minute structure","schedule":"Checks every minute. Enters between 9:40 AM and 11:30 AM ET and after 1:30 PM ET, never in the last 40 minutes, and closes everything 10 minutes before the close.","rules":["Sweep: price runs past the previous day's high or low, or a high or low from earlier today, then closes back inside within a few minutes.","Structure shift: a finished 5-minute candle closes beyond the recent swing, in the opposite direction of the sweep.","Fair value gap: on the 1-minute chart, a three-bar gap forms after the sweep. The bot enters when price comes back into it.","Sweep of a low means long, sweep of a high means short. The stop goes just beyond the sweep.","Take-profit at 2 times the risk. Closed after 60 minutes at most, and before the market closes.","The whole account goes into one position at a time. If several stocks set up together, the cleanest setup is taken."],"params":[{"key":"setup_max_age","label":"Sweep must be within","display":"45 min","hint":"How recent the sweep has to be"},{"key":"min_sweep_pct","label":"Smallest sweep","display":"0.02%","hint":"How far past the level price has to poke"},{"key":"min_fvg_pct","label":"Smallest gap","display":"0.03%","hint":"Size of the fair value gap, as a share of the price"},{"key":"target_r","label":"Take-profit","display":"2x the risk","hint":"Distance of the profit target, as a multiple of the stop distance"},{"key":"max_hold_minutes","label":"Longest hold","display":"60 min","hint":"A trade is closed after this long"},{"key":"risk_per_trade_pct","label":"Risk per trade","display":"0.50%","hint":"Share of the account lost if the stop-loss is hit. The bot never goes above 2%"}],"indicators":[{"key":"stage","label":"Setup progress (0 to 4)","decimals":0,"range":[0,4],"zone":"above","marks":[{"value":3.5,"label":"Entry"}]}],"settings":[{"label":"Max daily loss","display":"3.0%","hint":"New trades stop for the day if the account falls this far"},{"label":"Check interval","display":"60 sec","hint":"How often the bot looks at the market"},{"label":"Risk per trade","display":"0.50% of the account","hint":"What the account loses if the stop-loss is hit. The bot never risks more than 2%"},{"label":"Position size","display":"Up to 95% of the account, one at a time","hint":"The whole account goes into one position. A close stop gets the full size; a wide stop gets a smaller one"},{"label":"Longest hold","display":"60 min","hint":"Every position is closed before the market closes"},{"label":"Closes everything","display":"10 min before the close","hint":"No positions are held overnight"},{"label":"Pause after losses","display":"3 losing trades in a row","hint":"No new trades for the rest of the day"},{"label":"Entry order","display":"Limit order just past the price","hint":"A limit order a few hundredths of a percent beyond the last price. It is cancelled if it has not filled within 90 seconds, so the bot never chases a fast move"}],"symbols":["AAPL","MSFT","SPY","QQQ","NVDA","TSLA","AMD","PLTR"],"configured":true},"ema-vwap":{"id":"ema-vwap","name":"EMA + VWAP Trend","description":"A trend-following strategy. When a stock is trending (price on the right side of the day's VWAP and a fast moving average pulled away from a slow one), the bot waits for the first dip against the trend, buys it in an uptrend or sells it in a downtrend, and rides the move with a stop beyond the dip. It is the opposite of RSI Reversion: that one bets on snap-backs, this one bets that strong moves keep going. The whole account goes into one position at a time and everything is closed before the market closes.","kind":"intraday","timeframe":"1-minute entries, 5-minute trend","schedule":"Checks every minute. Enters between 9:40 AM and 11:30 AM ET and after 1:30 PM ET, never in the last 40 minutes, and closes everything 10 minutes before the close.","rules":["Uptrend: price above the day's VWAP, the 9-period average above the 21-period average (5-minute candles), and the 21-period average rising. Downtrend is the mirror image.","Pullback: within the last 8 minutes price dipped to the 9-period average without breaking well below the 21-period one.","Trigger: the latest 1-minute bar turns back with the trend and closes beyond the previous bar's high (long) or low (short).","The stop goes just beyond the dip. Take-profit at 2 times the risk, or the trade ends at the close.","The whole account goes into one position at a time. If several stocks set up together, the strongest trend is taken."],"params":[{"key":"fast_ema","label":"Fast average","display":"9 candles","hint":"5-minute candles"},{"key":"slow_ema","label":"Slow average","display":"21 candles","hint":"5-minute candles"},{"key":"pullback_bars","label":"Pullback window","display":"8 min","hint":"How far back the dip may have happened"},{"key":"min_trend_gap_pct","label":"Smallest trend gap","display":"0.03%","hint":"How far apart the two averages must be to call it a trend"},{"key":"target_r","label":"Take-profit","display":"2x the risk","hint":"Distance of the profit target, as a multiple of the stop distance"},{"key":"risk_per_trade_pct","label":"Risk per trade","display":"0.50%","hint":"Share of the account lost if the stop-loss is hit. The bot never goes above 2%"}],"indicators":[{"key":"vs_vwap_pct","label":"Price vs VWAP (%)","decimals":2,"range":[-1,1],"zone":"outside","marks":[{"value":-0.05,"label":"Down"},{"value":0.05,"label":"Up"}]},{"key":"ema_gap_pct","label":"EMA 9 vs EMA 21 (%)","decimals":3,"range":[-0.3,0.3],"zone":"outside","marks":[{"value":-0.03,"label":"Down"},{"value":0.03,"label":"Up"}]},{"key":"trend_stage","label":"Setup progress (0 to 3)","decimals":0,"range":[0,3],"zone":"above","marks":[{"value":2.5,"label":"Entry"}]}],"settings":[{"label":"Max daily loss","display":"3.0%","hint":"New trades stop for the day if the account falls this far"},{"label":"Check interval","display":"60 sec","hint":"How often the bot looks at the market"},{"label":"Risk per trade","display":"0.50% of the account","hint":"What the account loses if the stop-loss is hit. The bot never risks more than 2%"},{"label":"Position size","display":"Up to 95% of the account, one at a time","hint":"The whole account goes into one position. A close stop gets the full size; a wide stop gets a smaller one"},{"label":"Longest hold","display":"Until the target, the stop, or the close","hint":"Every position is closed before the market closes"},{"label":"Closes everything","display":"10 min before the close","hint":"No positions are held overnight"},{"label":"Pause after losses","display":"3 losing trades in a row","hint":"No new trades for the rest of the day"},{"label":"Entry order","display":"Limit order just past the price","hint":"A limit order a few hundredths of a percent beyond the last price. It is cancelled if it has not filled within 90 seconds, so the bot never chases a fast move"}],"symbols":["AAPL","MSFT","SPY","QQQ","NVDA","TSLA","AMD","PLTR"],"configured":true}};
 const DEMO_PRICE = { AAPL: 232.4, MSFT: 421.8, SPY: 571.2, QQQ: 489.6, NVDA: 134.2, TSLA: 249.8, AMD: 164.3, PLTR: 38.9 };
+// The same estimate the bot uses for what a real account would give up on a trade.
+const DEMO_COSTS = { slipIn: 0.0002, slipMarket: 0.0002, slipStop: 0.0005, slipTarget: 0, sec: 0.0000278, taf: 0.000166, tafMax: 8.3 };
+function demoCost(side, qty, entry, exit, kind) {
+  const out = kind === "Stop-loss" ? DEMO_COSTS.slipStop : kind === "Take-profit" ? DEMO_COSTS.slipTarget : DEMO_COSTS.slipMarket;
+  const sold = qty * (side === "long" ? exit : entry);
+  return Math.round((qty * entry * DEMO_COSTS.slipIn + qty * exit * out + sold * DEMO_COSTS.sec + Math.min(qty * DEMO_COSTS.taf, DEMO_COSTS.tafMax)) * 100) / 100;
+}
 
 function makeDemo() {
-  const rnd = mulberry32(20261001);
+  const rnd = mulberry32(20261015);
   const gauss = () => { let u = 0, v = 0; while (!u) u = rnd(); while (!v) v = rnd(); return Math.sqrt(-2 * Math.log(u)) * Math.cos(2 * Math.PI * v); };
   const now = Date.now(), np = etParts(now), r2 = (x) => Math.round(x * 100) / 100, iso = (ms) => new Date(ms).toISOString();
-  const syms = Object.keys(DEMO_PRICE), notSet = params.get("demo") === "notset";
+  const syms = Object.keys(DEMO_PRICE), mode = params.get("demo"), notSet = mode === "notset", paused = mode === "paused";
+  const START = 5000;
 
   // the last 10 weekdays (today included once the session has opened)
   const days = [];
@@ -522,10 +551,10 @@ function makeDemo() {
   const at = (back, hh, mm) => { const d = days[Math.max(0, lastIdx - back)]; return etToMs(d.y, d.mo, d.d, hh, mm); };
   let openNow = false;
 
-  // an account curve: starts at $100,000 on its first day, then wanders with a small upward drift
+  // RSI Reversion's account curve: starts at $5,000, then wanders with a small upward drift
   function genEquity(firstDay, drift, vol) {
     const pts = [];
-    let eq = 100000, stop = false;
+    let eq = START, stop = false;
     for (let di = firstDay; di < days.length && !stop; di++) {
       const open = at(lastIdx - di, 9, 30);
       for (let k = 0; k <= 78; k++) {
@@ -537,27 +566,53 @@ function makeDemo() {
     }
     return pts;
   }
-  const curves = { "rsi-reversion": genEquity(0, 1.4, 36), orb: genEquity(4, 2.2, 30), "rsi2-swing": genEquity(4, 1.1, 13) };
+  const curves = { "rsi-reversion": genEquity(0, 0.06, 1.7) };
   const anchor = curves["rsi-reversion"][curves["rsi-reversion"].length - 1].t;
   let oid = 1;
   const newId = () => "demo-" + String(oid++).padStart(4, "0");
 
-  // building blocks shared by the three strategies
-  function newBook() { return { decisions: [], orders: [], recent: [], positions: [], openOrders: [], trades: [] }; }
+  // The other two curves are built from their trades, so the daily results line up with the trade list.
+  function curveFromTrades(firstDay, B, vol) {
+    const pts = [];
+    const closed = B.trades.map((x) => ({ a: Date.parse(x.opened_at), b: Date.parse(x.t), pnl: x.pnl }));
+    let stop = false;
+    for (let di = firstDay; di < days.length && !stop; di++) {
+      const open = at(lastIdx - di, 9, 30);
+      for (let k = 0; k <= 78; k++) {
+        const t = open + k * 300000;
+        if (t > now) { stop = true; break; }
+        let eq = START;
+        for (const c of closed) {
+          if (t >= c.b) eq += c.pnl;
+          else if (t > c.a) { const f = (t - c.a) / Math.max(1, c.b - c.a); eq += c.pnl * f * f + gauss() * vol * (1 - f); }
+        }
+        for (const o of B.openTrades) if (t > o.a) { const f = Math.min(1, (t - o.a) / Math.max(1, anchor - o.a)); eq += o.unreal * f + gauss() * vol * 0.4; }
+        pts.push({ t, v: r2(eq) });
+      }
+    }
+    return pts;
+  }
+
+  // building blocks shared by the strategies
+  function newBook() { return { decisions: [], orders: [], recent: [], positions: [], openOrders: [], trades: [], openTrades: [] }; }
   function addEntry(B, o) {
-    const sgn = o.dir === "long" ? 1 : -1, stop = r2(o.px * (1 - sgn * o.stopPct)), tgt = r2(o.px * (1 + sgn * o.tpPct)), id = newId();
-    B.orders.push({ t: iso(o.t), symbol: o.sym, direction: o.dir, kind: "entry", side: sgn > 0 ? "buy" : "sell", qty: o.qty, ref_price: o.px, reason: o.reason, stop_price: stop, take_profit_price: tgt, status: "submitted", order_id: id, alpaca_status: o.open ? "accepted" : "filled" });
-    B.recent.push({ id, symbol: o.sym, side: sgn > 0 ? "buy" : "sell", qty: o.qty, filled_qty: o.qty, type: "market", order_class: "bracket", status: "filled", limit_price: null, stop_price: null, filled_avg_price: o.px, submitted_at: iso(o.t), filled_at: iso(o.t + 1500) });
+    const sgn = o.dir === "long" ? 1 : -1, id = newId();
+    const stop = o.stop != null ? o.stop : r2(o.px * (1 - sgn * o.stopPct)), tgt = o.tgt != null ? o.tgt : r2(o.px * (1 + sgn * o.tpPct));
+    const lim = r2(o.px * (1 + sgn * 0.0005));
+    B.orders.push({ t: iso(o.t), symbol: o.sym, direction: o.dir, kind: "entry", side: sgn > 0 ? "buy" : "sell", qty: o.qty, ref_price: o.px, limit_price: lim, reason: o.reason, stop_price: stop, take_profit_price: tgt, status: "submitted", order_id: id, alpaca_status: o.open ? "accepted" : "filled" });
+    B.recent.push({ id, symbol: o.sym, side: sgn > 0 ? "buy" : "sell", qty: o.qty, filled_qty: o.qty, type: "limit", order_class: "bracket", status: "filled", limit_price: lim, stop_price: null, filled_avg_price: o.px, submitted_at: iso(o.t), filled_at: iso(o.t + 1500) });
     return { stop, tgt, sgn };
   }
   function addExit(B, o) {   // a finished trade: how it ended, what it made
     const sgn = o.dir === "long" ? 1 : -1, pnl = r2(sgn * (o.exit - o.px) * o.qty);
-    B.trades.push({ t: iso(o.tEnd), opened_at: iso(o.t), symbol: o.sym, side: o.dir, qty: o.qty, entry: o.px, exit: o.exit, pnl, pnl_pct: r2(sgn * (o.exit / o.px - 1) * 100), exit_kind: o.kind });
+    const stop = o.stop != null ? o.stop : r2(o.px * (1 - sgn * o.stopPct)), risk = r2(Math.abs(o.px - stop) * o.qty), cost = demoCost(o.dir, o.qty, o.px, o.exit, o.kind);
+    B.trades.push({ t: iso(o.tEnd), opened_at: iso(o.t), symbol: o.sym, side: o.dir, qty: o.qty, entry: o.px, exit: o.exit, pnl, pnl_pct: r2(sgn * (o.exit / o.px - 1) * 100), exit_kind: o.kind,
+      cost, pnl_net: r2(pnl - cost), risk, r: risk ? r2(pnl / risk) : null, stop, target: o.tgt != null ? o.tgt : r2(o.px * (1 + sgn * o.tpPct)), held_min: r2((o.tEnd - o.t) / 60000), why: o.reason, setup: o.setup || null });
     const exitSide = sgn > 0 ? "sell" : "buy";
     if (o.kind === "Stop-loss" || o.kind === "Take-profit") {
       B.recent.push({ id: newId(), symbol: o.sym, side: exitSide, qty: o.qty, filled_qty: o.qty, type: o.kind === "Stop-loss" ? "stop" : "limit", order_class: "bracket", status: "filled", limit_price: o.kind === "Take-profit" ? o.exit : null, stop_price: o.kind === "Stop-loss" ? o.exit : null, filled_avg_price: o.exit, submitted_at: iso(o.t), filled_at: iso(o.tEnd) });
     } else {
-      B.orders.push({ t: iso(o.tEnd - 2000), symbol: o.sym, direction: "exit", kind: "exit", side: exitSide, qty: o.qty, ref_price: o.exit, reason: o.why || "The price recovered, so the bot sells.", message: o.why || "", status: "submitted" });
+      B.orders.push({ t: iso(o.tEnd - 2000), symbol: o.sym, direction: "exit", kind: "exit", side: exitSide, qty: o.qty, ref_price: o.exit, reason: o.exitWhy || "Closing the position.", message: o.exitWhy || "", status: "submitted" });
       B.recent.push({ id: newId(), symbol: o.sym, side: exitSide, qty: o.qty, filled_qty: o.qty, type: "market", order_class: "simple", status: "filled", limit_price: null, stop_price: null, filled_avg_price: o.exit, submitted_at: iso(o.tEnd - 2000), filled_at: iso(o.tEnd) });
     }
   }
@@ -565,16 +620,19 @@ function makeDemo() {
     const { stop, tgt, sgn } = o.levels, exitSide = sgn > 0 ? "sell" : "buy";
     B.openOrders.push({ id: newId(), symbol: o.sym, side: exitSide, qty: o.qty, filled_qty: 0, type: "stop", order_class: "bracket", status: "held", limit_price: null, stop_price: stop, filled_avg_price: null, submitted_at: iso(o.t), filled_at: null });
     B.openOrders.push({ id: newId(), symbol: o.sym, side: exitSide, qty: o.qty, filled_qty: 0, type: "limit", order_class: "bracket", status: "new", limit_price: tgt, stop_price: null, filled_avg_price: null, submitted_at: iso(o.t), filled_at: null });
-    B.positions.push({ symbol: o.sym, side: o.dir, qty: o.qty, avg_entry_price: o.px, current_price: cur, market_value: sgn * o.qty * cur, unrealized_pl: r2(sgn * (cur - o.px) * o.qty), unrealized_plpc: sgn * (cur - o.px) / o.px });
+    const unreal = r2(sgn * (cur - o.px) * o.qty);
+    B.positions.push({ symbol: o.sym, side: o.dir, qty: o.qty, avg_entry_price: o.px, current_price: cur, market_value: sgn * o.qty * cur, unrealized_pl: unreal, unrealized_plpc: sgn * (cur - o.px) / o.px });
+    B.openTrades.push({ a: o.t, unreal });
   }
   const dec = (B, t, sym, price, indicators, signal, reason, checks, action, detail) =>
     B.decisions.push({ t: iso(t), symbol: sym, price: r2(price), indicators, signal, reason, checks, action: action || "none", detail: detail || null });
+  const sizeFor = (px, rps) => Math.max(1, Math.min(Math.floor(START * 0.005 / rps), Math.floor(START * 0.95 / px)));
 
   /* ---------- 1. RSI Reversion: one reading a minute, small stop and target ---------- */
   const R = newBook();
   {
     const spec = {
-      AAPL: { rsi: 26.8, qty: 53, dir: "long" }, MSFT: { rsi: 52.3 }, SPY: { rsi: 71.4, qty: 21, dir: "short" }, QQQ: { rsi: 44.1 },
+      AAPL: { rsi: 26.8, qty: 2, dir: "long" }, MSFT: { rsi: 52.3 }, SPY: { rsi: 71.4, qty: 1, dir: "short" }, QQQ: { rsi: 44.1 },
       NVDA: { rsi: 61.5 }, TSLA: { rsi: 33.2 }, AMD: { rsi: 48.7 }, PLTR: { rsi: 55.9 },
     };
     const N = 90, low = 30, high = 70;
@@ -595,7 +653,7 @@ function makeDemo() {
         let action = "none", detail = null;
         if (signal !== "none") {
           if (!held && sp.dir === signal) {
-            held = true; action = "order_submitted"; detail = "Bracket order sent for " + sp.qty + " shares.";
+            held = true; action = "order_submitted"; detail = "Limit order sent for " + sp.qty + " shares.";
             checks.push({ label: "No open position or pending order", ok: true });
             const o = { t, sym, dir: signal, px: r2(ps[i]), qty: sp.qty, reason, stopPct: 0.004, tpPct: 0.008 };
             o.levels = addEntry(R, { ...o, open: true });
@@ -605,137 +663,233 @@ function makeDemo() {
         dec(R, t, sym, ps[i], { rsi }, signal, reason, checks, action, detail);
       }
     }
+    // earlier trades: [days back, symbol, direction, win?, hour, minute, flag]
     const past = [
       [2, "SPY", "long", true, 10, 41], [3, "AAPL", "short", false, 11, 18], [4, "MSFT", "short", null, 13, 5, "reject"], [5, "MSFT", "long", true, 14, 52],
       [6, "AAPL", "long", true, 9, 48], [7, "SPY", "short", false, 15, 12, "small"], [1, "TSLA", "long", false, 11, 3], [1, "NVDA", "short", false, 13, 40],
       [2, "AMD", "long", false, 10, 15], [3, "QQQ", "long", true, 12, 22], [4, "PLTR", "short", true, 14, 31], [5, "TSLA", "short", false, 10, 5],
       [6, "NVDA", "long", true, 11, 58], [8, "AMD", "short", true, 9, 52],
     ];
+    // plus a steady stream of small trades so the sample is big enough to read
+    const fill = ["AAPL", "MSFT", "SPY", "QQQ", "NVDA", "TSLA", "AMD", "PLTR"];
+    for (let i = 0; i < 24; i++) {
+      past.push([Math.floor(rnd() * 9), fill[Math.floor(rnd() * 8)], rnd() < 0.5 ? "long" : "short", rnd() < 0.6, 9 + Math.floor(rnd() * 6), 5 + Math.floor(rnd() * 50)]);
+    }
     for (const [back, sym, dir, win, hh, mm, flag] of past) {
       const t = at(back, hh, mm), sgn = dir === "long" ? 1 : -1, px = r2(DEMO_PRICE[sym] * (1 + gauss() * 0.01));
-      const qty = flag === "small" ? 0 : Math.floor(12500 / px);
+      if (t >= anchor - 3600000) continue;
+      const qty = flag === "small" ? 0 : Math.max(1, Math.floor(625 / px));
       const reason = dir === "long" ? "RSI 27.9 is at or below 30. The price looks oversold, so the bot looks for a bounce (long)." : "RSI 72.6 is at or above 70. The price looks overbought, so the bot looks for a pullback (short).";
       const stop = r2(px * (1 - sgn * 0.004)), tgt = r2(px * (1 + sgn * 0.008));
-      const base = { t: iso(t), symbol: sym, direction: dir, kind: "entry", side: sgn > 0 ? "buy" : "sell", qty, ref_price: px, reason, stop_price: stop, take_profit_price: tgt };
+      const base = { t: iso(t), symbol: sym, direction: dir, kind: "entry", side: sgn > 0 ? "buy" : "sell", qty, ref_price: px, limit_price: r2(px * (1 + sgn * 0.0005)), reason, stop_price: stop, take_profit_price: tgt };
       if (flag === "small") { R.orders.push({ ...base, status: "not_placed", message: "The position size rounds down to 0 shares at this price." }); continue; }
       if (flag === "reject") { R.orders.push({ ...base, status: "rejected", message: "asset " + sym + " cannot be sold short" }); continue; }
       addEntry(R, { t, sym, dir, px, qty, reason, stopPct: 0.004, tpPct: 0.008 });
-      addExit(R, { t, tEnd: t + 24 * 60000, sym, dir, px, qty, exit: win ? tgt : stop, kind: win ? "Take-profit" : "Stop-loss" });
+      addExit(R, { t, tEnd: t + (12 + Math.floor(rnd() * 30)) * 60000, sym, dir, px, qty, reason, exit: win ? tgt : stop, kind: win ? "Take-profit" : "Stop-loss", stopPct: 0.004, tpPct: 0.008 });
     }
   }
 
-  /* ---------- 2. Opening Range Breakout: in at 9:35, out before the close ---------- */
-  const O = newBook();
+  /* ---------- the two whole-account strategies share this helper ---------- */
+  // spec: [days back, hour, minute, symbol, direction, price, risk per share, how it ended, minutes held, result in R for a market exit, setup details]
+  function placeTrades(B, specs, reasonOf, indOf, minLast) {
+    for (const [back, hh, mm, sym, dir, px, rps, kind, held, rmult, setup] of specs) {
+      if (lastIdx - back < 4) continue;                 // these strategies only have data from the 5th day on
+      const t0 = at(back, hh, mm), sgn = dir === "long" ? 1 : -1;
+      if (t0 > anchor - 120000) continue;
+      const stop = r2(px - sgn * rps), tgt = r2(px + sgn * rps * 2), qty = sizeFor(px, rps), reason = reasonOf(sym, dir, setup, stop);
+      const t1 = t0 + held * 60000;
+      dec(B, t0, sym, px, indOf(sym, dir, 4), dir, reason, [{ label: "Setup complete", ok: true }, { label: "Inside the trading window", ok: true }, { label: "No open position", ok: true }], "order_submitted", "Limit order sent for " + qty + " shares at $" + r2(px * (1 + sgn * 0.0005)).toFixed(2) + ".");
+      if (t1 > anchor) {
+        if (openNow) {
+          const o = { t: t0, sym, dir, px, qty, reason, stop, tgt, open: true };
+          o.levels = addEntry(B, o);
+          addHolding(B, o, r2(px + sgn * rps * 0.45));
+        }
+        continue;
+      }
+      const exit = kind === "Take-profit" ? tgt : kind === "Stop-loss" ? stop : r2(px + sgn * rps * rmult);
+      addEntry(B, { t: t0, sym, dir, px, qty, reason, stop, tgt });
+      addExit(B, { t: t0, tEnd: t1, sym, dir, px, qty, reason, stop, tgt, exit, kind, setup, exitWhy: kind === "Market exit" ? (held >= 60 ? "Open for " + held + " minutes, past the limit, so the bot closes it." : "End of day: close everything") : "" });
+    }
+  }
+
+  /* ---------- 2. TJR Liquidity Sweep ---------- */
+  const T = newBook();
   {
-    const T = DEMO_DESC.orb;
-    const openT = Math.min(at(0, 9, 35), anchor);
-    const rows = {
-      AAPL: { rv: 1.61, rg: 0.42, sig: "long", hi: 232.9, lo: 231.9 }, MSFT: { rv: 0.4, rg: 0.32, sig: "skipvol" }, SPY: { rv: 0.99, rg: 0.07, sig: "flat" },
-      QQQ: { rv: 1.0, rg: 0.04, sig: "small" }, NVDA: { rv: 1.7, rg: 0.52, sig: "short", hi: 134.9, lo: 134.2 }, TSLA: { rv: 1.3, rg: 1.8, sig: "big" },
-      AMD: { rv: 0.7, rg: 0.3, sig: "skipvol" }, PLTR: { rv: 1.12, rg: 0.31, sig: "none" },
+    const lvl = (n) => n === "previous_high" ? "the previous day's high" : n === "previous_low" ? "the previous day's low" : n === "today_high" ? "today's high" : "today's low";
+    const specs = [
+      [0, 10, 12, "QQQ", "short", 491.2, 1.1, "Take-profit", 35, 0, { swept: "previous_high", swept_level: 491.85, sweep_time: "9:52", sweep_extreme: 492.3, structure_shift_level: 490.6, structure_shift_time: "10:03", gap_low: 490.95, gap_high: 491.4, gap_time: "10:07" }],
+      [1, 9, 58, "SPY", "long", 568.9, 0.9, "Stop-loss", 14, 0, { swept: "previous_low", swept_level: 568.2, sweep_time: "9:44", sweep_extreme: 567.95, structure_shift_level: 569.4, structure_shift_time: "9:51", gap_low: 568.55, gap_high: 569.0, gap_time: "9:55" }],
+      [1, 13, 41, "NVDA", "long", 133.1, 0.45, "Take-profit", 48, 0, { swept: "today_low", swept_level: 132.4, sweep_time: "13:22", sweep_extreme: 132.2, structure_shift_level: 133.3, structure_shift_time: "13:31", gap_low: 132.95, gap_high: 133.2, gap_time: "13:37" }],
+      [2, 10, 25, "TSLA", "short", 252.4, 1.3, "Market exit", 60, 0.8, { swept: "previous_high", swept_level: 252.9, sweep_time: "10:08", sweep_extreme: 253.4, structure_shift_level: 251.6, structure_shift_time: "10:17", gap_low: 252.05, gap_high: 252.6, gap_time: "10:21" }],
+      [3, 9, 52, "AMD", "long", 163.2, 0.8, "Stop-loss", 9, 0, { swept: "previous_low", swept_level: 162.5, sweep_time: "9:41", sweep_extreme: 162.3, structure_shift_level: 163.6, structure_shift_time: "9:46", gap_low: 162.9, gap_high: 163.35, gap_time: "9:49" }],
+      [4, 14, 10, "AAPL", "long", 229.9, 0.55, "Take-profit", 41, 0, { swept: "today_low", swept_level: 229.1, sweep_time: "13:50", sweep_extreme: 228.95, structure_shift_level: 230.2, structure_shift_time: "14:01", gap_low: 229.7, gap_high: 230.0, gap_time: "14:06" }],
+      [5, 10, 40, "SPY", "short", 572.6, 0.8, "Stop-loss", 22, 0, { swept: "today_high", swept_level: 572.9, sweep_time: "10:26", sweep_extreme: 573.35, structure_shift_level: 571.8, structure_shift_time: "10:33", gap_low: 572.3, gap_high: 572.75, gap_time: "10:36" }],
+      [5, 14, 35, "MSFT", "long", 419.3, 1.0, "Market exit", 60, 0.4, { swept: "previous_low", swept_level: 418.4, sweep_time: "14:14", sweep_extreme: 418.2, structure_shift_level: 419.8, structure_shift_time: "14:24", gap_low: 418.95, gap_high: 419.5, gap_time: "14:30" }],
+    ];
+    placeTrades(T, specs,
+      (sym, dir, s) => "Price ran " + lvl(s.swept) + " (" + usd2.format(s.swept_level) + "), the 5-minute chart shifted " + (dir === "long" ? "up" : "down") + ", and price is back in a " + (dir === "long" ? "bullish" : "bearish") + " fair value gap (" + usd2.format(s.gap_low) + " to " + usd2.format(s.gap_high) + "). The bot goes " + dir + ", with the stop just " + (dir === "long" ? "under" : "over") + " the sweep " + (dir === "long" ? "low" : "high") + " (" + usd2.format(s.sweep_extreme) + ").",
+      (sym, dir, stage) => ({ stage }));
+    // one entry that never filled
+    const tc = at(1, 10, 31);
+    if (lastIdx - 1 >= 4 && tc < anchor - 3600000) {
+      T.orders.push({ t: iso(tc), symbol: "AMD", direction: "short", kind: "entry", side: "sell", qty: 20, ref_price: 166.4, limit_price: 166.32, reason: "Price ran today's high and shifted structure down, and price is back in a bearish fair value gap.", stop_price: 167.1, take_profit_price: 165.0, status: "submitted", order_id: newId(), alpaca_status: "canceled" });
+      T.orders.push({ t: iso(tc + 91000), symbol: "AMD", direction: "cancel", kind: "cancel", side: null, qty: 20, reason: "Not filled within 90 seconds, so the order was cancelled. The bot does not chase fast moves.", message: "Not filled within 90 seconds, so the order was cancelled. The bot does not chase fast moves.", status: "submitted" });
+    }
+    // the latest reading for each stock: how far along each setup is
+    const when = anchor, rows = {
+      AAPL: [0], MSFT: [1, "today_low", 420.6, 22, "long"], SPY: [0], QQQ: [2, "previous_high", 492.3, 17, "short"],
+      NVDA: [3, "today_low", 133.4, 28, "long", 133.55, 133.85], TSLA: [0], AMD: [0], PLTR: [1, "previous_low", 38.7, 12, "long"],
     };
     for (const [sym, r] of Object.entries(rows)) {
-      const px = DEMO_PRICE[sym], ind = { rel_vol: r.rv, range_pct: r.rg, opening_high: r.hi || r2(px * 1.002), opening_low: r.lo || r2(px * 0.998) };
-      const volOk = r.rv >= 1, sizeOk = r.rg >= 0.05 && r.rg <= 1.5;
-      const checks = [{ label: "Opening volume at least 1.0x the recent average (" + r.rv.toFixed(2) + "x)", ok: volOk }, { label: "Opening candle between 0.05% and 1.50% of the price", ok: sizeOk }];
-      const why = { long: "The first 5-minute candle closed up on strong volume, so the bot goes long, with its stop at the low of that candle.", short: "The first 5-minute candle closed down on strong volume, so the bot goes short, with its stop at the high of that candle.",
-        skipvol: "Opening volume is only " + r.rv.toFixed(2) + "x the recent average, below the 1.0x needed. Skipping this stock today.", flat: "The first candle closed flat, so there is no direction to follow today.",
-        small: "The opening candle is 0.04% of the price, outside the 0.05% to 1.50% range the bot accepts.", big: "The opening candle is 1.80% of the price, outside the 0.05% to 1.50% range the bot accepts.", none: "The first candle closed flat, so there is no direction to follow today." }[r.sig];
-      const signal = r.sig === "long" || r.sig === "short" ? r.sig : "none";
-      if (signal !== "none") checks.push({ label: "No open position or pending order", ok: true });
-      dec(O, openT, sym, px, ind, signal, why, checks, signal !== "none" ? "order_submitted" : "none", signal !== "none" ? "Bracket order sent." : null);
+      const [stage, name, level, ago2, dir, gb, gt] = r, px = DEMO_PRICE[sym], longSide = dir === "long";
+      let reason, checks;
+      if (stage === 0) {
+        reason = "No liquidity sweep yet. Price has not run the previous day's or today's high or low and snapped back.";
+        checks = [{ label: "Price ran a resting high or low and snapped back (last 45 min)", ok: false }];
+      } else {
+        const lead = "Price ran " + lvl(name) + " (" + usd2.format(level) + ") " + ago2 + " minutes ago and closed back inside.";
+        checks = [{ label: "Price ran " + lvl(name) + " (" + usd2.format(level) + ") and closed back inside", ok: true }, { label: "5-minute chart shifted structure " + (longSide ? "up" : "down"), ok: stage >= 2 }, { label: "1-minute " + (longSide ? "bullish" : "bearish") + " fair value gap formed", ok: stage >= 3 }, { label: "Price has come back into the gap", ok: stage >= 4 }];
+        reason = stage === 1 ? lead + " Waiting for the 5-minute chart to shift " + (longSide ? "up" : "down") + "."
+          : stage === 2 ? lead + " The 5-minute chart has shifted " + (longSide ? "up" : "down") + ". Waiting for a fair value gap on the 1-minute chart."
+          : lead + " A fair value gap formed between " + usd2.format(gb) + " and " + usd2.format(gt) + ". Waiting for price to come back into it.";
+      }
+      dec(T, when, sym, px, { stage }, "none", reason, checks);
     }
-    // today's two trades
-    const aapl = { t: openT, sym: "AAPL", dir: "long", px: 232.4, qty: 62, reason: "The first 5-minute candle closed up on strong volume, so the bot goes long, with its stop at the low of that candle.", stopPct: 0.0043, tpPct: 0.043 };
-    aapl.levels = addEntry(O, { ...aapl, open: openNow });
-    if (openNow) addHolding(O, aapl, 233.1);
-    else addExit(O, { ...aapl, tEnd: at(0, 15, 55), exit: 234.05, kind: "Market exit", why: "End of day: close everything" });
-    const nvda = { t: openT, sym: "NVDA", dir: "short", px: 134.2, qty: 120, reason: "The first 5-minute candle closed down on strong volume, so the bot goes short, with its stop at the high of that candle.", stopPct: 0.0052, tpPct: 0.052 };
-    addEntry(O, { ...nvda, open: false });
-    addExit(O, { ...nvda, tEnd: Math.min(at(0, 10, 12), anchor), exit: r2(134.2 * 1.0052), kind: "Stop-loss" });
-    // earlier days, all closed out before the close
-    const hist = [[1, "TSLA", "long", 249.1, 40, "Market exit", 1.3], [1, "MSFT", "short", 424.9, 29, "Stop-loss", -1], [2, "NVDA", "long", 131.6, 94, "Market exit", 0.7], [2, "AMD", "short", 168.2, 74, "Market exit", 1.1],
-      [3, "SPY", "long", 566.4, 22, "Stop-loss", -1], [3, "PLTR", "long", 37.1, 330, "Market exit", -0.4], [4, "QQQ", "short", 492.5, 25, "Market exit", 0.9], [4, "AAPL", "long", 227.6, 54, "Stop-loss", -1], [5, "TSLA", "short", 252.8, 39, "Market exit", 1.6]];
-    for (const [back, sym, dir, px, qty, kind, rmult] of hist) {
-      if (lastIdx - back < 4) continue;   // this strategy only has data from the 5th day on
-      const t = at(back, 9, 35), sgn = dir === "long" ? 1 : -1, risk = r2(px * 0.0045);
-      const levels = addEntry(O, { t, sym, dir, px, qty, reason: "The first 5-minute candle closed " + (dir === "long" ? "up" : "down") + " on strong volume, so the bot goes " + dir + ", with its stop at the " + (dir === "long" ? "low" : "high") + " of that candle.", stopPct: 0.0045, tpPct: 0.045 });
-      addExit(O, { t, tEnd: kind === "Stop-loss" ? t + 47 * 60000 : at(back, 15, 55), sym, dir, px, qty, exit: kind === "Stop-loss" ? levels.stop : r2(px + sgn * risk * rmult), kind, why: "End of day: close everything" });
-    }
-    O.desc = T;
   }
 
-  /* ---------- 3. RSI(2) Pullback: a few trades a month, held for days ---------- */
+  /* ---------- 3. EMA + VWAP Trend ---------- */
   const W = newBook();
   {
-    const when = Math.min(at(0, 15, 50), anchor);
-    const rows = {
-      AAPL: [62.4, 6.1, 2.2], MSFT: [71.8, 3.4, 1.9], SPY: [55.0, 7.9, 0.8], QQQ: [58.3, 8.8, 1.0],
-      NVDA: [18.6, 4.1, -2.4], TSLA: [8.9, -3.2, -4.8], AMD: [43.1, 8.2, -0.8], PLTR: [49.2, 21.0, 1.1],
+    const specs = [
+      [0, 10, 46, "NVDA", "long", 134.6, 0.35, "Market exit", 300, 1.4, { vwap: 134.05, fast_ema: 134.4, slow_ema: 134.15, pullback_extreme: 134.25, ema_gap_pct: 0.19 }],
+      [0, 10, 2, "SPY", "short", 572.1, 0.6, "Stop-loss", 17, 0, { vwap: 572.7, fast_ema: 572.25, slow_ema: 572.6, pullback_extreme: 572.7, ema_gap_pct: -0.061 }],
+      [1, 10, 20, "QQQ", "long", 487.9, 0.8, "Take-profit", 52, 0, { vwap: 487.1, fast_ema: 487.6, slow_ema: 487.0, pullback_extreme: 487.1, ema_gap_pct: 0.123 }],
+      [1, 13, 5, "AMD", "short", 166.0, 0.5, "Stop-loss", 21, 0, { vwap: 166.5, fast_ema: 166.1, slow_ema: 166.4, pullback_extreme: 166.5, ema_gap_pct: -0.18 }],
+      [2, 10, 33, "TSLA", "short", 253.0, 1.4, "Take-profit", 64, 0, { vwap: 254.2, fast_ema: 253.2, slow_ema: 254.0, pullback_extreme: 254.4, ema_gap_pct: -0.315 }],
+      [2, 14, 12, "MSFT", "long", 420.5, 0.9, "Market exit", 94, 0.6, { vwap: 419.8, fast_ema: 420.3, slow_ema: 419.9, pullback_extreme: 419.9, ema_gap_pct: 0.095 }],
+      [3, 10, 9, "SPY", "long", 568.0, 0.6, "Take-profit", 38, 0, { vwap: 567.2, fast_ema: 567.8, slow_ema: 567.3, pullback_extreme: 567.4, ema_gap_pct: 0.088 }],
+      [3, 13, 20, "PLTR", "long", 37.8, 0.12, "Stop-loss", 26, 0, { vwap: 37.6, fast_ema: 37.72, slow_ema: 37.55, pullback_extreme: 37.68, ema_gap_pct: 0.453 }],
+      [3, 14, 30, "AAPL", "short", 229.2, 0.5, "Market exit", 80, -0.3, { vwap: 229.7, fast_ema: 229.3, slow_ema: 229.55, pullback_extreme: 229.7, ema_gap_pct: -0.109 }],
+      [4, 10, 15, "NVDA", "short", 132.0, 0.4, "Stop-loss", 12, 0, { vwap: 132.5, fast_ema: 132.1, slow_ema: 132.35, pullback_extreme: 132.4, ema_gap_pct: -0.189 }],
+      [5, 10, 40, "AMD", "long", 161.0, 0.6, "Take-profit", 47, 0, { vwap: 160.3, fast_ema: 160.8, slow_ema: 160.4, pullback_extreme: 160.4, ema_gap_pct: 0.249 }],
+      [5, 13, 55, "TSLA", "long", 246.0, 1.2, "Stop-loss", 33, 0, { vwap: 245.2, fast_ema: 245.8, slow_ema: 245.1, pullback_extreme: 245.1, ema_gap_pct: 0.285 }],
+    ];
+    placeTrades(W, specs,
+      (sym, dir, s) => (dir === "long" ? "Uptrend" : "Downtrend") + " (price " + (dir === "long" ? "above" : "below") + " VWAP " + usd2.format(s.vwap) + ", EMA 9 " + (dir === "long" ? "above" : "below") + " EMA 21). The dip to EMA 9 held and price turned back, so the bot goes " + dir + ", with the stop " + (dir === "long" ? "under" : "over") + " the dip (" + usd2.format(s.pullback_extreme) + ").",
+      (sym, dir, stage) => ({ vs_vwap_pct: dir === "long" ? 0.12 : -0.1, ema_gap_pct: dir === "long" ? 0.19 : -0.17, trend_stage: 3 }));
+    const when = anchor, rows = {
+      AAPL: [0.18, 0.062, 3], MSFT: [-0.02, 0.011, 0], SPY: [0.07, 0.034, 1], QQQ: [-0.14, -0.071, 2],
+      NVDA: [0.0, 0.0, 0], TSLA: [-0.31, -0.22, 1], AMD: [0.04, -0.02, 0], PLTR: [0.22, 0.14, 2],
     };
-    for (const [sym, [rsi2, v200, v5]] of Object.entries(rows)) {
-      const px = sym === "AMD" ? 158.22 : DEMO_PRICE[sym], up = v200 > 0, dip = rsi2 < 10;
-      const checks = [{ label: "Price above its 200-day average (uptrend)", ok: up }, { label: "RSI(2) below 10 (a sharp dip)", ok: dip }];
-      let reason = "RSI(2) is " + rsi2.toFixed(1) + ", not a sharp dip. No buy.";
-      if (sym === "AMD") { reason = "Still holding AMD (day 3 of 7). The price is below its 5-day average, so the bot keeps holding."; checks.length = 0; checks.push({ label: "Price above its 5-day average (time to sell)", ok: false }, { label: "Held 7 trading days or more (3 so far)", ok: false }); }
-      else if (dip && !up) reason = "RSI(2) is " + rsi2.toFixed(1) + ", a sharp dip, but the price is below its 200-day average, so the bot stays out.";
-      else if (rsi2 < 25) reason = "RSI(2) is " + rsi2.toFixed(1) + ", getting low but not below 10 yet. No buy.";
-      dec(W, when, sym, px, { rsi2, vs_sma200: v200, vs_sma5: v5 }, "none", reason, checks);
+    for (const [sym, [vv, gap, stage]] of Object.entries(rows)) {
+      const px = DEMO_PRICE[sym], up = vv > 0.05 && gap > 0.04, dn = vv < -0.05 && gap < -0.04;
+      let reason = "No clear trend. Price is close to VWAP and the two averages are tangled, so the bot stays out.";
+      if (up || dn) reason = stage >= 2 ? (up ? "Uptrend" : "Downtrend") + ". Price has dipped to the fast average. Waiting for a 1-minute bar to turn back with the trend." : (up ? "Uptrend" : "Downtrend") + " (price " + (vv > 0 ? "+" : "") + vv.toFixed(2) + "% from VWAP). Waiting for a pullback to the fast average.";
+      const checks = [{ label: "Price " + (vv < 0 ? "below" : "above") + " VWAP and the fast average " + (gap < 0 ? "below" : "above") + " the slow one (5-minute chart)", ok: up || dn }, { label: "Pullback to the fast average in the last 15 minutes", ok: stage >= 2 }, { label: "A 1-minute bar turned back with the trend", ok: stage >= 3 }];
+      dec(W, when, sym, px, { vs_vwap_pct: vv, ema_gap_pct: gap, trend_stage: stage }, "none", reason, checks);
     }
-    const amd = { t: at(2, 15, 48), sym: "AMD", dir: "long", px: 157.64, qty: 79, reason: "RSI(2) is 9.7, a sharp dip, and the price is still above its 200-day average, so the bot buys the dip.", stopPct: 0.08, tpPct: 0.2 };
-    amd.levels = addEntry(W, { ...amd, open: true });
-    addHolding(W, amd, 158.22);
-    const hist = [[7, "NVDA", "long", 124.3, 100, 3, "Market exit", 128.9], [9, "TSLA", "long", 242.2, 51, 4, "Market exit", 237.9], [9, "SPY", "long", 561.5, 22, 2, "Market exit", 566.8]];
-    for (const [back, sym, dir, px, qty, held, kind, exit] of hist) {
-      if (lastIdx - back < 4) continue;
-      const t = at(back, 15, 48);
-      addEntry(W, { t, sym, dir, px, qty, reason: "RSI(2) is 8.4, a sharp dip, and the price is still above its 200-day average, so the bot buys the dip.", stopPct: 0.08, tpPct: 0.2 });
-      addExit(W, { t, tEnd: at(Math.max(0, back - held), 15, 48), sym, dir, px, qty, exit, kind, why: "The price recovered above its 5-day average, so the bot sells." });
-    }
+  }
+  curves["tjr-sweep"] = curveFromTrades(4, T, 2.2);
+  curves["ema-vwap"] = curveFromTrades(4, W, 2.2);
+
+  /* ---------- SPY buy-and-hold at every account-value point ---------- */
+  const benchmark = [];
+  {
+    let p = DEMO_PRICE.SPY * 0.985;
+    for (const pt of curves["rsi-reversion"]) { p *= 1 + 0.00004 + gauss() * 0.0006; benchmark.push({ t: pt.t, v: r2(p) }); }
+    const k = DEMO_PRICE.SPY / benchmark[benchmark.length - 1].v;
+    benchmark.forEach((b) => { b.v = r2(b.v * k); });
+  }
+
+  /* ---------- a sample backtest, so the Backtest tab has something to show ---------- */
+  function makeBacktest() {
+    const dates = [], c = new Date(Date.UTC(np.y, np.mo - 1, np.d));
+    c.setUTCDate(c.getUTCDate() - 1);
+    while (dates.length < 60) { if (c.getUTCDay() !== 0 && c.getUTCDay() !== 6) dates.unshift(c.toISOString().slice(0, 10)); c.setUTCDate(c.getUTCDate() - 1); }
+    const n = dates.length, split = dates[Math.floor(n * 0.7) - 1];
+    const curve = (gross, net, wob) => {
+      const w = [0]; for (let i = 1; i <= n; i++) w.push(w[i - 1] + gauss() * wob);
+      return dates.map((d, i) => [d, r2(START + gross * (i + 1) / n + (w[i + 1] - w[n] * (i + 1) / n)), r2(START + net * (i + 1) / n + (w[i + 1] - w[n] * (i + 1) / n))]);
+    };
+    const dd = (eq) => { let pk = -Infinity, worst = 0; eq.forEach((e) => { pk = Math.max(pk, e[2]); worst = Math.min(worst, (e[2] - pk) / pk * 100); }); return r2(worst); };
+    const mk = (id, name, o) => {
+      const eq = curve(o.gross, o.net, o.wob);
+      const part = (p) => ({ ...p, return_net_pct: r2(p.pnl_net / START * 100) });
+      return {
+        id, name, params: {},
+        summary: { trades: o.n, win_rate: o.win, pnl_gross: o.gross, pnl_net: o.net, costs: r2(o.gross - o.net), avg_win_net: o.aw, avg_loss_net: o.al, profit_factor_gross: o.pfg, profit_factor_net: o.pfn, avg_r: o.avgr, avg_hold_min: o.hold,
+          long: { trades: Math.round(o.n * 0.52), win_rate: o.win + 2.1, pnl_net: r2(o.net * 0.62) }, short: { trades: o.n - Math.round(o.n * 0.52), win_rate: o.win - 2.4, pnl_net: r2(o.net * 0.38) },
+          return_gross_pct: r2(o.gross / START * 100), return_net_pct: r2(o.net / START * 100), max_drawdown_pct: dd(eq) },
+        earlier_part: part({ through: split, ...o.early }), later_part: part({ after: split, ...o.late }), equity: eq, trades: [],
+      };
+    };
+    const spy = []; let sp = 560;
+    dates.forEach((d) => { sp *= 1 + 0.0005 + gauss() * 0.0055; spy.push([d, r2(sp)]); });
+    return {
+      generated_at: iso(now - 3 * 3600000), days: n, start: dates[0], end: dates[n - 1], balance: START,
+      costs: DEMO_COSTS,
+      benchmark: { symbol: "SPY", points: spy },
+      data_note: "Sample numbers. Prices come from Alpaca's free IEX feed, which covers only part of the market's volume, so real fills could differ.",
+      strategies: [
+        mk("rsi-reversion", "RSI Reversion", { n: 188, win: 61.2, gross: 226, net: 95, aw: 1.34, al: -1.93, pfg: 1.31, pfn: 1.12, avgr: 0.04, hold: 21, wob: 14,
+          early: { trades: 131, win_rate: 62.6, pnl_net: 88, profit_factor_net: 1.17, avg_r: 0.06 }, late: { trades: 57, win_rate: 57.9, pnl_net: 7, profit_factor_net: 1.03, avg_r: 0.01 } }),
+        mk("tjr-sweep", "TJR Liquidity Sweep", { n: 34, win: 38.2, gross: 170, net: 106, aw: 21.6, al: -9.1, pfg: 1.46, pfn: 1.22, avgr: 0.18, hold: 38, wob: 22,
+          early: { trades: 24, win_rate: 41.7, pnl_net: 92, profit_factor_net: 1.31, avg_r: 0.23 }, late: { trades: 10, win_rate: 30.0, pnl_net: 14, profit_factor_net: 1.06, avg_r: 0.05 } }),
+        mk("ema-vwap", "EMA + VWAP Trend", { n: 71, win: 36.6, gross: 20, net: -114, aw: 14.8, al: -8.3, pfg: 1.03, pfn: 0.81, avgr: -0.11, hold: 44, wob: 25,
+          early: { trades: 50, win_rate: 38.0, pnl_net: -41, profit_factor_net: 0.92, avg_r: -0.05 }, late: { trades: 21, win_rate: 33.3, pnl_net: -73, profit_factor_net: 0.62, avg_r: -0.24 } }),
+      ],
+    };
   }
 
   /* ---------- put each strategy's account together ---------- */
-  function finish(id, B, name) {
+  function finish(id, B) {
     const eq = curves[id], last = eq[eq.length - 1], key = etKey(last.t);
     const firstToday = eq.findIndex((p) => etKey(p.t) === key), prev = firstToday > 0 ? eq[firstToday - 1].v : eq[0].v;
     const gross = B.positions.reduce((s, p) => s + Math.abs(p.market_value), 0);
     const desc = JSON.parse(JSON.stringify(DEMO_DESC[id]));
-    const off = notSet && id === "orb";
+    const off = notSet && id === "ema-vwap", pause = paused && id === "ema-vwap";
     desc.configured = !off;
     const meta = { id, name: desc.name, description: desc.description, kind: desc.kind, timeframe: desc.timeframe, configured: !off, symbols: syms };
     const sorted = (a, k) => a.slice().sort((x, y) => Date.parse(x[k]) - Date.parse(y[k]));
+    const ok = { state: openNow ? "running" : "stopped", message: openNow ? "Checking the market." : "The market is closed. The next scheduled run starts before the open.", started_at: iso(anchor - 3 * 3600000), passes: 187, last_pass_at: iso(openNow ? now - 20000 : anchor), errors_in_row: 0, last_error: null, last_error_at: null, run_url: null, version: "8.0.0" };
     const status = {
       schema: 2, updated_at: iso(openNow ? now : anchor + 30000), strategy: desc,
       bot: off
-        ? { state: "not_configured", message: "No API keys yet. Add the secrets APCA_API_KEY_ID_ORB and APCA_API_SECRET_KEY_ORB in the repo settings to switch this strategy on.", started_at: null, passes: 0, last_pass_at: null, errors_in_row: 0, last_error: null, last_error_at: null, run_url: null, version: "7.0.0" }
-        : { state: openNow ? "running" : "stopped", message: openNow ? "Checking the market." : "The market is closed. The next scheduled run starts before the open.", started_at: iso(anchor - 3 * 3600000), passes: 187, last_pass_at: iso(openNow ? now - 20000 : anchor), errors_in_row: 0, last_error: null, last_error_at: null, run_url: null, version: "7.0.0" },
+        ? { state: "not_configured", message: "No API keys yet. Add the secrets APCA_API_KEY_ID_TREND and APCA_API_SECRET_KEY_TREND in the repo settings to switch this strategy on.", started_at: null, passes: 0, last_pass_at: null, errors_in_row: 0, last_error: null, last_error_at: null, run_url: null, version: "8.0.0" }
+        : pause ? { ...ok, state: "halted", message: "3 losing trades in a row, so no new trades for the rest of today. Trading resumes tomorrow." } : ok,
       market: { is_open: openNow },
-      account: off ? {} : { equity: last.v, last_equity: prev, day_pnl: r2(last.v - prev), day_pnl_pct: (last.v - prev) / prev * 100, cash: r2(last.v - gross), buying_power: r2(last.v * 4), status: "ACTIVE", starting_equity: 100000, tracking_since: iso(eq[0].t) },
+      account: off ? {} : { equity: last.v, last_equity: prev, day_pnl: r2(last.v - prev), day_pnl_pct: (last.v - prev) / prev * 100, cash: r2(last.v - gross), buying_power: r2(last.v * 4), status: "ACTIVE", starting_equity: START, tracking_since: iso(eq[0].t) },
       positions: off ? [] : B.positions, open_orders: off ? [] : B.openOrders, recent_orders: off ? [] : B.recent.sort((a, b) => Date.parse(b.filled_at || b.submitted_at) - Date.parse(a.filled_at || a.submitted_at)),
-      tuning: id === "rsi-reversion" ? { last_tuned: iso(at(0, 17, 0) - (openNow ? 86400000 : 0)), backtest_return_pct: 0.71 } : null,
+      tuning: id === "rsi-reversion" ? {
+        last_tuned: iso(at(0, 17, 0) - (openNow ? 86400000 : 0)), backtest_return_pct: null, suggest_only: true,
+        suggestion: { date: fKey.format(at(0, 17, 0) - (openNow ? 86400000 : 0)), lookback_days: 30, stocks: syms.slice().sort(), min_trades: 20, min_improvement_pct: 1.0,
+          current: { rsi_period: 14, rsi_oversold: 30, rsi_overbought: 70, stop_loss_pct: 0.004, take_profit_pct: 0.008, return_pct: 2.14, num_trades: 212 },
+          best: { rsi_period: 14, rsi_oversold: 25, rsi_overbought: 75, stop_loss_pct: 0.004, take_profit_pct: 0.008, return_pct: 3.62, num_trades: 96 },
+          would_change: true, note: "The best combination beat the current settings by 1.48 percentage points (need 1). Not applied: the tuner only suggests.", applied: false },
+      } : null,
     };
-    return { meta, status, equity: off ? [] : eq, trades: off ? [] : sorted(B.trades, "t"), decisions: off ? [] : sorted(B.decisions, "t"), orders: off ? [] : sorted(B.orders, "t"), demo: true, tuning: [] };
+    return { meta, status, equity: off ? [] : eq, trades: off ? [] : sorted(B.trades, "t"), decisions: off ? [] : sorted(B.decisions, "t"), orders: off ? [] : sorted(B.orders, "t"), benchmark: off ? [] : benchmark, demo: true, tuning: [] };
   }
-  const byId = { "rsi-reversion": finish("rsi-reversion", R), orb: finish("orb", O), "rsi2-swing": finish("rsi2-swing", W) };
+  const byId = { "rsi-reversion": finish("rsi-reversion", R), "tjr-sweep": finish("tjr-sweep", T), "ema-vwap": finish("ema-vwap", W) };
 
-  // the nightly tuner's history (RSI Reversion only)
+  // the nightly tuner's history: what it WOULD have picked each night (it never applies it)
   const lastTuned = at(0, 17, 0) - (openNow ? 86400000 : 0), rows = [];
-  const tune = (d, sym, per, lo, hi, sl, tp, ret, n) => rows.push({ date: fKey.format(lastTuned - d * 86400000), symbol: sym, rsi_period: per, rsi_oversold: lo, rsi_overbought: hi, stop_loss_pct: sl, take_profit_pct: tp, return_pct: (ret / 100).toFixed(4), num_trades: n });
-  [["AAPL", 14, 30, 70, 0.004, 0.008, 0.71, 44], ["MSFT", 14, 30, 70, 0.004, 0.008, 0.33, 31], ["SPY", 14, 30, 70, 0.004, 0.008, 0.52, 39]].forEach((r) => tune(0, ...r));
-  [["AAPL", 14, 30, 70, 0.004, 0.008, 0.62, 41], ["MSFT", 21, 25, 75, 0.003, 0.006, 0.31, 28], ["SPY", 14, 30, 70, 0.004, 0.008, 0.44, 36]].forEach((r) => tune(1, ...r));
-  [["AAPL", 14, 35, 65, 0.004, 0.008, 0.55, 52], ["MSFT", 10, 30, 70, 0.006, 0.012, 0.27, 33], ["SPY", 21, 30, 70, 0.003, 0.006, 0.38, 24]].forEach((r) => tune(2, ...r));
+  const tune = (d, tag, per, lo, hi, sl, tp, ret, n) => rows.push({ date: fKey.format(lastTuned - d * 86400000), symbol: tag, rsi_period: per, rsi_oversold: lo, rsi_overbought: hi, stop_loss_pct: sl, take_profit_pct: tp, return_pct: ret.toFixed(3), num_trades: n });
+  [[0, 14, 25, 75, 0.004, 0.008, 3.62, 96, 2.14, 212], [1, 14, 25, 75, 0.004, 0.008, 3.31, 91, 2.05, 208], [2, 14, 35, 65, 0.006, 0.012, 2.77, 64, 2.21, 205], [3, 14, 25, 75, 0.004, 0.008, 3.02, 88, 1.96, 214]]
+    .forEach(([d, per, lo, hi, sl, tp, ret, n, cr, cn]) => { tune(d, "ALL (current)", 14, 30, 70, 0.004, 0.008, cr, cn); tune(d, "ALL (suggested)", per, lo, hi, sl, tp, ret, n); });
   byId["rsi-reversion"].tuning = rows;
 
-  return { strategies: ["rsi-reversion", "orb", "rsi2-swing"].map((id) => byId[id].meta), byId, demo: true, loadedAt: Date.now() };
+  return { strategies: ["rsi-reversion", "tjr-sweep", "ema-vwap"].map((id) => byId[id].meta), byId, benchmark, backtest: makeBacktest(), demo: true, loadedAt: Date.now() };
 }
 
 /* ======================= state ======================= */
 const ui = {
-  range: "day", tab: store.get("tab") || "orders", feed: "signals",
+  range: "day", tab: store.get("tab") || "orders", feed: "signals", after: store.get("after") === "on",
   view: store.get("view") || "compare", auto: store.get("auto") !== "off", demo: false, theme: store.get("theme") || "auto",
 };
 ui.demo = params.has("demo") || !LIVE_CAPABLE;
-let model = null, lastError = null, charts = [], inflight = false;
+let model = null, lastError = null, charts = [], inflight = false, backtestCache = null;
 const app = $("#app");
 
 /* ======================= derived data ======================= */
@@ -780,7 +934,7 @@ function healthOf(e) {
     case "waiting": return stale ? quiet : { tone: "good", glyph: "●", label: "Waiting for open", detail: b.message };
     case "starting": return stale ? quiet : { tone: "good", glyph: "●", label: "Starting", detail: b.message };
     case "error": return { tone: "bad", glyph: "✕", label: "Errors", detail: (b.last_error || b.message) };
-    case "halted": return { tone: "warn", glyph: "!", label: "Halted", detail: b.message };
+    case "halted": return { tone: "warn", glyph: "!", label: /losing trades in a row/i.test(b.message || "") ? "Paused for today" : "Halted", detail: b.message };
     default: return { tone: "idle", glyph: "○", label: "Idle", detail: b.message };
   }
 }
@@ -798,13 +952,23 @@ function healthAll(m) {
   return running ? { tone: "good", glyph: "●", label: running === hs.length ? "All running" : running + " of " + hs.length + " running", detail: "" } : { tone: "idle", glyph: "○", label: "Idle", detail: "" };
 }
 
+const netOf = (t) => (t.pnl_net != null ? t.pnl_net : t.pnl) || 0;
+function sideStats(trades) {
+  const n = trades.length, w = trades.filter((t) => t.pnl > 0).length;
+  return { n, winRate: n ? w / n * 100 : null, gross: trades.reduce((s, t) => s + (t.pnl || 0), 0), net: trades.reduce((s, t) => s + netOf(t), 0) };
+}
 function tradeStats(trades) {
   const n = trades.length;
   const wins = trades.filter((t) => t.pnl > 0), losses = trades.filter((t) => t.pnl < 0);
   const gw = wins.reduce((s, t) => s + t.pnl, 0), gl = -losses.reduce((s, t) => s + t.pnl, 0);
+  const rs = trades.filter((t) => t.r != null).map((t) => t.r);
   return {
     n, wins: wins.length, losses: losses.length,
     winRate: n ? wins.length / n * 100 : null,
+    costs: trades.reduce((s, t) => s + (t.cost || 0), 0),
+    net: trades.reduce((s, t) => s + netOf(t), 0),
+    avgR: rs.length ? rs.reduce((a, b) => a + b, 0) / rs.length : null,
+    long: sideStats(trades.filter((t) => t.side === "long")), short: sideStats(trades.filter((t) => t.side === "short")),
     total: trades.reduce((s, t) => s + (t.pnl || 0), 0),
     avgWin: wins.length ? gw / wins.length : null,
     avgLoss: losses.length ? -gl / losses.length : null,
@@ -844,21 +1008,37 @@ function tradesIn(e, period) {
 }
 
 // Build the overlay lines: every strategy as percent return from its own value at the common start.
-function buildCompare(m, period) {
+function buildCompare(m, period, after) {
   const act = activeEntries(m).filter((e) => e.equity.length), parts = act.map((e) => ({ e, ...sliceFor(e, period) }));
   const set = new Set();
   parts.forEach((p) => p.inside.forEach((q) => set.add(q.t)));
   let ts = Array.from(set).sort((a, b) => a - b);
   if (ts.length > 400) { const k = Math.ceil(ts.length / 400); ts = ts.filter((_, i) => i % k === 0 || i === ts.length - 1); }
   const series = parts.map((p) => {
-    let j = -1;
+    let j = -1, k = 0, cum = 0;
+    // what the trades closed so far would have cost in a real account (slippage and fees)
+    const costs = after ? (p.e.trades || []).filter((x) => x.cost != null).map((x) => ({ t: Date.parse(x.t), c: x.cost })).sort((a, b) => a.t - b.t) : [];
     const pts = ts.map((t) => {
       while (j + 1 < p.inside.length && p.inside[j + 1].t <= t) j++;
-      const val = j >= 0 ? p.inside[j].v : p.base.v;
+      while (k < costs.length && costs[k].t <= t) { if (costs[k].t >= period.start) cum += costs[k].c; k++; }
+      const val = (j >= 0 ? p.inside[j].v : p.base.v) - cum;
       return { t, val, pct: (val / p.base.v - 1) * 100 };
     });
     return { id: p.e.meta.id, name: p.e.meta.name || p.e.meta.id, color: colorOf(m, p.e.meta.id), pts, base: p.base.v };
   });
+  // SPY bought at the start and held, for the same period
+  if (m.benchmark && m.benchmark.length && ts.length) {
+    const sl = sliceFor({ equity: m.benchmark }, period);
+    if (sl.base && sl.inside.length) {
+      let j = -1;
+      const pts = ts.map((t) => {
+        while (j + 1 < sl.inside.length && sl.inside[j + 1].t <= t) j++;
+        const val = j >= 0 ? sl.inside[j].v : sl.base.v;
+        return { t, val, pct: (val / sl.base.v - 1) * 100 };
+      });
+      series.push({ id: "spy", name: "SPY buy and hold", color: "var(--ink-3)", dashed: true, pts, base: sl.base.v, bench: true });
+    }
+  }
   return { ts, series };
 }
 
@@ -880,7 +1060,14 @@ function actionChip(a) {
     default: return null;
   }
 }
-function dirChip(dir) { return dir === "long" ? chip("Long", "long", "▲") : dir === "exit" ? chip("Exit", "idle", "■") : chip("Short", "short", "▼"); }
+function dirChip(dir) { return dir === "long" ? chip("Long", "long", "▲") : dir === "exit" ? chip("Exit", "idle", "■") : dir === "cancel" ? chip("Cancel", "idle", "–") : chip("Short", "short", "▼"); }
+// How much to trust a result: a handful of trades says almost nothing, a hundred or more starts to.
+function sampleBadge(n) {
+  if (n < 30) return chip("Too early to judge", "warn", "!");
+  if (n < 100) return chip("Still building", "idle", "○");
+  return chip("Large enough to read", "good", "✓");
+}
+const SAMPLE_NOTE = "Fewer than 30 closed trades says very little, 30 to 99 is a rough guide, and 100 or more starts to mean something.";
 function card(title, sub, ...body) {
   return h("section", { class: "card" }, (title || sub) ? h("div", { class: "card-h" }, title ? h("h2", { text: title }) : null, sub ? h("p", { class: "sub", text: sub }) : null) : null, ...body);
 }
@@ -1099,6 +1286,7 @@ function drawCompare(host, cmp, o) {
   ss.forEach((s) => {
     const p = sv("path", { d: s.pts.map((q, i) => (i ? "L" : "M") + X(i).toFixed(1) + "," + Y(q.pct).toFixed(1)).join(""), class: "cl" });
     p.style.stroke = s.color;
+    if (s.dashed) p.setAttribute("stroke-dasharray", "6 4");
     svg.append(p);
   });
   // end markers and their values, nudged apart so close lines stay readable
@@ -1128,10 +1316,10 @@ function drawCompare(host, cmp, o) {
     cross.setAttribute("x1", x); cross.setAttribute("x2", x); cross.setAttribute("visibility", "visible");
     hovs.forEach((c, k) => { c.setAttribute("cx", x); c.setAttribute("cy", Y(ss[k].pts[i].pct)); c.setAttribute("visibility", "visible"); });
     tip.replaceChildren(
-      h("div", { class: "tip-s", text: stamp(ts[i]) }),
+      h("div", { class: "tip-s", text: (o.stamp || stamp)(ts[i]) }),
       ...ss.map((s) => { const q = s.pts[i]; return h("div", { class: "tip-row" },
-        h("span", { class: "nm" }, h("span", { class: "swatch", style: "--c:" + s.color, "aria-hidden": "true" }), s.name),
-        h("span", { class: "vv " + tone(q.pct) }, spct(q.pct) + " · " + money(q.val, 0))); }));
+        h("span", { class: "nm" }, h("span", { class: "swatch" + (s.dashed ? " dashed" : ""), style: "--c:" + s.color, "aria-hidden": "true" }), s.name),
+        h("span", { class: "vv " + tone(q.pct) }, spct(q.pct) + (s.bench ? "" : " · " + money(q.val, 0)))); }));
     tip.hidden = false;
     tip.style.left = Math.min(Math.max(x, 130), W - 130) + "px";
   }
@@ -1157,7 +1345,6 @@ function renderBanners(list, demo) {
       h("span", { class: "g t-warn", "aria-hidden": "true" }, "!"),
       h("div", null, h("b", { text: "Sample data. " }), "These numbers are made up to show the layout. Your bot's real records appear here once it has run.",
         LIVE_CAPABLE ? h("div", null, h("button", { class: "btn", type: "button", onclick: () => setDemo(false) }, "Show my bot's data")) : null)));
-    return out;
   }
   list.filter(isConfigured).forEach((e) => {
     const hl = healthOf(e), b = e.status.bot || {};
@@ -1178,7 +1365,7 @@ function renderSummary(m) {
   const gross = pos.reduce((s, p) => s + Math.abs(p.market_value || 0), 0);
   const todayKey = etKey(Date.now());
   const todays = m.orders.filter((o) => etKey(Date.parse(o.t)) === todayKey);
-  const placed = todays.filter((o) => o.status === "submitted").length;
+  const placed = todays.filter((o) => o.status === "submitted" && o.kind !== "cancel").length;
   const rejected = todays.filter((o) => o.status === "rejected").length;
   const unplaced = todays.filter((o) => o.status === "not_placed").length;
   const stat = (k, v, d, cls) => h("div", { class: "stat" }, h("div", { class: "k", text: k }), h("div", { class: "v " + (cls || ""), text: v }), h("div", { class: "d", text: d }));
@@ -1253,10 +1440,9 @@ function renderStrategy(m) {
     h("div", { class: "small muted", style: "margin-top:12px; font-weight:500", text: "Watching · " + (s.timeframe || "") }),
     h("div", { class: "syms" }, (s.symbols || []).map((x) => h("span", { class: "sym-chip", text: x }))));
   const kv = (rows) => h("table", { class: "kv" }, h("tbody", null, rows.map((r) => h("tr", null, h("th", { scope: "row" }, r.label, r.hint ? h("span", { class: "hint", text: r.hint }) : null), h("td", { text: r.display })))));
-  const tuneNote = t && t.last_tuned
-    ? "The nightly tuner last ran " + ago(Date.parse(t.last_tuned)) + (t.backtest_return_pct != null ? " and picked these settings from a backtest that returned " + spct(Number(t.backtest_return_pct)) + "." : ".")
-    : t ? "The nightly tuner has not changed these settings yet."
-    : "These settings are fixed. The nightly tuner only adjusts RSI Reversion.";
+  const tuneNote = t && (t.suggest_only || t.last_tuned)
+    ? "These settings are fixed. The nightly tuner only suggests changes" + (t.last_tuned ? " (it last ran " + ago(Date.parse(t.last_tuned)) + ")" : "") + " and never applies them. See the Tuning tab."
+    : "These settings are fixed. Change them by editing the strategy's config file in the repo.";
   const right = h("div", null,
     h("h3", { text: "Parameters" }), kv(s.params || []),
     h("h3", { style: "margin-top:16px", text: "Risk and timing" }), kv(s.settings || []),
@@ -1336,6 +1522,7 @@ function renderPositions(m) {
 }
 
 function resultChip(o, live) {
+  if (o.kind === "cancel") return chip("Cancelled", "idle", "–");
   if (o.status === "rejected") return chip("Rejected", "bad", "✕");
   if (o.status === "not_placed") return chip("Not placed", "warn", "!");
   const st = live ? live.status : o.alpaca_status;
@@ -1356,10 +1543,10 @@ function renderOrdersTab(m) {
   const open = m.status.open_orders || [];
   const fills = (m.status.recent_orders || []).filter((o) => o.status === "filled").slice(0, 25);
   return h("div", null,
-    h("div", { class: "subhead" }, h("h3", { text: "Orders the bot placed or tried to place" }), h("span", { class: "small muted", text: attempts.length + " shown" })),
+    h("div", { class: "subhead" }, h("h3", { text: "Orders the bot placed or tried to place" }), h("span", { class: "small muted", text: attempts.length + " shown · entries are limit orders, cancelled if not filled in 90 seconds" })),
     attempts.length ? tableOf(
-      [{ label: "When", nowrap: true }, { label: "Symbol" }, { label: "Side" }, { label: "Shares", num: true }, { label: "Price then", num: true }, { label: "Stop", num: true }, { label: "Target", num: true }, { label: "Result" }, { label: "Why or what happened", cls: "why" }],
-      attempts.map((o) => [stamp(Date.parse(o.t)), h("span", { class: "mono", text: o.symbol }), dirChip(o.direction), num(o.qty), money(o.ref_price), money(o.stop_price), money(o.take_profit_price), resultChip(o, live.get(o.order_id)), plainMessage(o.message) || o.reason || ""]))
+      [{ label: "When", nowrap: true }, { label: "Symbol" }, { label: "Side" }, { label: "Shares", num: true }, { label: "Price then", num: true }, { label: "Limit", num: true }, { label: "Stop", num: true }, { label: "Target", num: true }, { label: "Result" }, { label: "Why or what happened", cls: "why" }],
+      attempts.map((o) => [stamp(Date.parse(o.t)), h("span", { class: "mono", text: o.symbol }), dirChip(o.direction), num(o.qty), money(o.ref_price), money(o.limit_price), money(o.stop_price), money(o.take_profit_price), resultChip(o, live.get(o.order_id)), plainMessage(o.message) || o.reason || ""]))
       : emptyNote("No orders yet. The bot only orders when a signal fires and nothing else is blocking it."),
     h("div", { class: "subhead" }, h("h3", { text: "Exit orders waiting at Alpaca" }), h("span", { class: "small muted", text: "Stop-loss and take-profit orders for open positions" })),
     open.length ? tableOf(
@@ -1386,14 +1573,33 @@ function renderFeedTab(m) {
 }
 
 function renderTuneTab(m) {
-  const t = m.status.tuning || {}, rows = m.tuning.slice().reverse().slice(0, 40);
+  const t = m.status.tuning || {}, sg = t.suggestion, all = m.tuning.slice();
+  const isNew = (r) => /^ALL/.test(r.symbol || "");
+  const pct = (r) => (isNew(r) ? Number(r.return_pct) : Number(r.return_pct) * 100);
+  const rows = all.slice().reverse().slice(0, 40);
+  const setBox = (title, p, ret, n) => h("div", null, h("h3", { text: title }),
+    h("table", { class: "kv", style: "margin-top:6px" }, h("tbody", null, [
+      ["RSI period", p.rsi_period + " bars"], ["Oversold at", p.rsi_oversold], ["Overbought at", p.rsi_overbought],
+      ["Stop-loss", (Number(p.stop_loss_pct) * 100).toFixed(2) + "%"], ["Take-profit", (Number(p.take_profit_pct) * 100).toFixed(2) + "%"],
+      ["Backtest result", (ret > 0 ? "+" : ret < 0 ? "−" : "") + Math.abs(ret).toFixed(2) + " (sum of trade returns, %) from " + n + " trades"],
+    ].map(([a, b]) => h("tr", null, h("th", { scope: "row", text: a }), h("td", { text: String(b) }))))));
+  // how often would it have changed something? (the nights where suggested differs from current)
+  const byDate = {};
+  all.filter(isNew).forEach((r) => { (byDate[r.date] = byDate[r.date] || {})[/suggested/.test(r.symbol) ? "s" : "c"] = r; });
+  const key = (r) => [r.rsi_period, r.rsi_oversold, r.rsi_overbought, Number(r.stop_loss_pct), Number(r.take_profit_pct)].join("/");
+  const nights = Object.values(byDate).filter((d) => d.s && d.c), differ = nights.filter((d) => key(d.s) !== key(d.c)).length;
+  const picks = new Set(nights.filter((d) => key(d.s) !== key(d.c)).map((d) => key(d.s)));
   return h("div", null,
-    h("p", { class: "muted", style: "margin-bottom:10px", text: "Each night the tuner backtests a grid of settings against the last 10 days of 1-minute prices and keeps the best result for the next day. This is a re-fit of a few numbers to recent history, so a good backtest does not guarantee future results." }),
+    h("p", { class: "muted", style: "margin-bottom:10px", text: "The nightly tuner no longer changes anything. Each night it tests a grid of RSI settings on the last 30 days of 1-minute prices for all 8 stocks, after estimated costs, and records what it would pick. Your settings stay put, so one lucky stretch cannot quietly rewrite the strategy. If the suggestion stays the same night after night, it is probably real. If it keeps jumping, it is chasing noise." }),
     t.last_tuned ? h("p", { class: "small", style: "margin-bottom:10px", text: "Last run: " + stamp(Date.parse(t.last_tuned)) }) : null,
+    sg && sg.current ? h("div", { class: "sugg" }, setBox("Current settings", sg.current, Number(sg.current.return_pct), sg.current.num_trades),
+      sg.best ? setBox("Tuner's best, not applied", sg.best, Number(sg.best.return_pct), sg.best.num_trades) : h("div", null, h("h3", { text: "Tuner's best" }), h("p", { class: "muted", text: "No settings reached " + sg.min_trades + " trades, so there is no suggestion." }))) : null,
+    sg && sg.note ? h("p", { class: "small", style: "margin-bottom:8px", text: sg.note }) : null,
+    nights.length ? h("p", { class: "small muted", style: "margin-bottom:10px", text: "On " + differ + " of the last " + nights.length + " nights the tuner would have changed something" + (differ > 1 ? ", with " + picks.size + " different pick" + (picks.size === 1 ? "" : "s") + "." : ".") }) : null,
     rows.length ? tableOf(
-      [{ label: "Date", nowrap: true }, { label: "Symbol" }, { label: "RSI period", num: true }, { label: "Oversold", num: true }, { label: "Overbought", num: true }, { label: "Stop-loss", num: true }, { label: "Take-profit", num: true }, { label: "Backtest return", num: true }, { label: "Trades", num: true }],
-      rows.map((r) => [r.date, h("span", { class: "mono", text: r.symbol }), r.rsi_period, r.rsi_oversold, r.rsi_overbought, spct(Number(r.stop_loss_pct) * 100), spct(Number(r.take_profit_pct) * 100).replace("+", ""), h("span", { class: tone(Number(r.return_pct)) }, spct(Number(r.return_pct) * 100)), r.num_trades]))
-      : emptyNote("No tuning history yet. The nightly tuning job writes one row per symbol after the market closes."));
+      [{ label: "Date", nowrap: true }, { label: "Settings" }, { label: "RSI period", num: true }, { label: "Oversold", num: true }, { label: "Overbought", num: true }, { label: "Stop-loss", num: true }, { label: "Take-profit", num: true }, { label: "Backtest return", num: true }, { label: "Trades", num: true }],
+      rows.map((r) => [r.date, /current/.test(r.symbol) ? "Current" : /suggested/.test(r.symbol) ? "Suggested" : h("span", { class: "mono", text: r.symbol + " (old tuner)" }), r.rsi_period, r.rsi_oversold, r.rsi_overbought, (Number(r.stop_loss_pct) * 100).toFixed(2) + "%", (Number(r.take_profit_pct) * 100).toFixed(2) + "%", h("span", { class: tone(pct(r)) }, spct(pct(r))), r.num_trades]))
+      : emptyNote("No tuning history yet. The nightly job adds two rows after the market closes: the current settings and what it would suggest."));
 }
 
 function heldText(a, b) {
@@ -1403,20 +1609,49 @@ function heldText(a, b) {
   if (min < 36 * 60) return Math.round(min / 60) + " h";
   return Math.round(min / 1440) + " d";
 }
+const SWEPT = { previous_high: "the previous day's high", previous_low: "the previous day's low", today_high: "today's high", today_low: "today's low" };
+function setupValue(k, v) {
+  if (k === "swept") return SWEPT[v] || String(v);
+  if (typeof v === "number") return /pct/.test(k) ? v + "%" : usd2.format(v);
+  return String(v);
+}
+// What the bot saw when it took the trade, and how it turned out in risk units and after costs.
+function tradeDetails(t) {
+  const kv = [];
+  const add = (label, value) => { if (value != null && value !== "") kv.push([label, value]); };
+  if (t.r != null) add("Result in risk units", (t.r > 0 ? "+" : t.r < 0 ? "−" : "") + Math.abs(t.r).toFixed(2) + " R");
+  if (t.risk != null) add("Amount risked", money(t.risk));
+  if (t.stop != null) add("Stop-loss", money(t.stop));
+  if (t.target != null) add("Take-profit", money(t.target));
+  if (t.held_min != null) add("Held", Math.round(t.held_min) + " min");
+  if (t.cost != null) add("Estimated costs", money(t.cost));
+  if (t.pnl_net != null) add("Result after costs", smoney(t.pnl_net));
+  Object.entries(t.setup || {}).forEach(([k, v]) => { if (k !== "direction") add(k.replace(/_/g, " ").replace(/^./, (c) => c.toUpperCase()), setupValue(k, v)); });
+  if (!t.why && !kv.length) return "–";
+  return h("details", { class: "tdet" }, h("summary", { text: "Why and details" }),
+    h("div", { class: "tdet-body" }, t.why ? h("p", { class: "why-text", text: t.why }) : null,
+      kv.length ? h("table", { class: "kv" }, h("tbody", null, kv.map(([a, b]) => h("tr", null, h("th", { scope: "row", text: a }), h("td", { text: b }))))) : null));
+}
 function tradesTable(rows, m) {
   const withStrat = !!m;
-  const head = [{ label: "Closed", nowrap: true }].concat(withStrat ? [{ label: "Strategy" }] : [], [{ label: "Symbol" }, { label: "Side" }, { label: "Shares", num: true }, { label: "Entry", num: true }, { label: "Exit", num: true }, { label: "Held", num: true }, { label: "Result", num: true }, { label: "How it ended" }]);
+  const head = [{ label: "Closed", nowrap: true }].concat(withStrat ? [{ label: "Strategy" }] : [], [{ label: "Symbol" }, { label: "Side" }, { label: "Shares", num: true }, { label: "Entry", num: true }, { label: "Exit", num: true }, { label: "Held", num: true }, { label: "Result", num: true }, { label: "How it ended" }, { label: "Details" }]);
   return tableOf(head, rows.map((t) => [stamp(Date.parse(t.t))].concat(
     withStrat ? [h("span", { class: "legend-item" }, h("span", { class: "swatch", style: "--c:" + colorOf(m, t.sid), "aria-hidden": "true" }), nameOf(m, t.sid))] : [],
     [h("span", { class: "mono", text: t.symbol }), dirChip(t.side), num(t.qty), money(t.entry), money(t.exit), heldText(t.opened_at, t.t),
-      h("span", { class: tone(t.pnl) }, arrow(t.pnl) + smoney(t.pnl) + (t.pnl_pct != null ? " (" + spct(t.pnl_pct) + ")" : "")), t.exit_kind || ""])));
+      h("span", null, h("span", { class: tone(t.pnl) }, arrow(t.pnl) + smoney(t.pnl) + (t.pnl_pct != null ? " (" + spct(t.pnl_pct) + ")" : "")),
+        t.pnl_net != null ? h("div", { class: "small muted", text: "after costs " + smoney(t.pnl_net) }) : null), t.exit_kind || "", tradeDetails(t)])));
 }
 function renderTradesTab(e) {
   const st = tradeStats(e.trades), rows = e.trades.slice().reverse().slice(0, 100);
   return h("div", null,
     h("p", { class: "muted", style: "margin-bottom:10px", text: "A trade is closed when its position is gone, whether the stop-loss, the take-profit or the bot's own exit order ended it." }),
-    st.n ? h("p", { class: "small", style: "margin-bottom:10px" },
-      st.n + " closed · " + st.wins + " won, " + st.losses + " lost (" + (st.winRate == null ? "–" : st.winRate.toFixed(0) + "%") + " win rate) · total ", h("span", { class: tone(st.total) }, smoney(st.total))) : null,
+    st.n ? h("p", { class: "small", style: "margin-bottom:6px" },
+      st.n + " closed · " + st.wins + " won, " + st.losses + " lost (" + (st.winRate == null ? "–" : st.winRate.toFixed(0) + "%") + " win rate) · total ", h("span", { class: tone(st.total) }, smoney(st.total)),
+      " · after estimated costs ", h("span", { class: tone(st.net) }, smoney(st.net))) : null,
+    st.n ? h("p", { class: "small muted", style: "margin-bottom:10px" },
+      "Long: " + (st.long.n ? st.long.n + (st.long.n === 1 ? " trade, " : " trades, ") + smoney(st.long.net) + " after costs" : "none") + " · Short: " + (st.short.n ? st.short.n + (st.short.n === 1 ? " trade, " : " trades, ") + smoney(st.short.net) + " after costs" : "none") +
+      (st.avgR != null ? " · Average " + (st.avgR > 0 ? "+" : st.avgR < 0 ? "−" : "") + Math.abs(st.avgR).toFixed(2) + " R per trade" : "")) : null,
+    st.n ? h("p", { class: "small", style: "margin-bottom:10px" }, sampleBadge(st.n), " ", h("span", { class: "muted", text: SAMPLE_NOTE })) : null,
     rows.length ? tradesTable(rows) : emptyNote("No trades have closed yet. Each one appears here after its position is gone."));
 }
 
@@ -1450,7 +1685,7 @@ function renderNotSetUp(m, e) {
 }
 
 /* ---------- compare view ---------- */
-const swatchEl = (color, dot) => h("span", { class: "swatch" + (dot ? " dot" : ""), style: "--c:" + color, "aria-hidden": "true" });
+const swatchEl = (color, dot, dashed) => h("span", { class: "swatch" + (dot ? " dot" : "") + (dashed ? " dashed" : ""), style: "--c:" + color, "aria-hidden": "true" });
 
 function renderCompareSummary(m) {
   const act = activeEntries(m), sum = (f) => act.reduce((s, e) => s + (f(e) || 0), 0);
@@ -1474,7 +1709,7 @@ function renderCompareSummary(m) {
 }
 
 function renderCompareChart(m, period) {
-  const cmp = buildCompare(m, period), range = ui.range;
+  const cmp = buildCompare(m, period, ui.after), range = ui.range;
   const dayLabel = (periodOf(m, "day") || {}).label || "Today";
   const host = h("div", { class: "chart-host" });
   charts.push(() => drawCompare(host, cmp, { label: "Percent return of each strategy from the same start", xticks: makeXticks(range), empty: "Not enough history yet. A point is recorded about every 5 minutes while the market is open." }));
@@ -1483,17 +1718,21 @@ function renderCompareChart(m, period) {
     h("button", { type: "button", "aria-pressed": String(range === "all"), onclick: () => { ui.range = "all"; render(); } }, "All time"));
   const legend = h("div", { class: "legend" }, cmp.series.map((s) => {
     const last = s.pts[s.pts.length - 1];
-    return h("span", { class: "legend-item" }, swatchEl(s.color), s.name, last ? h("b", { class: tone(last.pct), text: spct(last.pct) }) : null);
+    return h("span", { class: "legend-item" }, swatchEl(s.color, false, s.dashed), s.name, last ? h("b", { class: tone(last.pct), text: spct(last.pct) }) : null);
   }));
+  const costSeg = h("div", { class: "seg", role: "group", "aria-label": "Costs" },
+    h("button", { type: "button", "aria-pressed": String(!ui.after), onclick: () => { ui.after = false; store.set("after", "off"); render(); } }, "As reported"),
+    h("button", { type: "button", "aria-pressed": String(ui.after), onclick: () => { ui.after = true; store.set("after", "on"); render(); } }, "After estimated costs"));
   const act = activeEntries(m).filter((e) => e.equity.length);
   const staggered = act.length > 1 && new Set(act.map((e) => e.equity[0].t)).size > 1;
-  const note = range === "day" ? "Each line shows percent change since that account's previous close."
+  const base = range === "day" ? "Each line shows percent change since that account's previous close."
     : staggered ? "Every line starts at 0% on " + stamp(period.start) + ", when the newest account began, so the comparison is fair."
     : "Every line starts at 0% when tracking began.";
+  const note = base + (ui.after ? " Costs subtracted: slippage and fees a real account would likely have paid." : " Paper fills are cleaner than real ones, so switch to “After estimated costs” for a more realistic view.");
   const step = Math.max(1, Math.ceil(cmp.ts.length / 60));
   const idx = []; for (let i = cmp.ts.length - 1; i >= 0; i -= step) idx.push(i);
   return card("Compare strategies", note,
-    h("div", { class: "card-h", style: "margin-top:-4px" }, seg),
+    h("div", { class: "row-tools" }, seg, costSeg),
     legend, host,
     cmp.ts.length ? dataDetails("Show values", tableOf([{ label: "Time (ET)", nowrap: true }].concat(cmp.series.map((s) => ({ label: s.name, num: true }))),
       idx.map((i) => [stamp(cmp.ts[i])].concat(cmp.series.map((s) => spct(s.pts[i].pct)))))) : null);
@@ -1503,24 +1742,39 @@ function renderCompareTable(m, period) {
   const act = activeEntries(m);
   const cols = act.map((e) => {
     const sl = sliceFor(e, period), last = sl.inside.length ? sl.inside[sl.inside.length - 1] : null, a = e.status.account || {};
-    return { e, ret: sl.base ? (last ? (last.v / sl.base.v - 1) * 100 : 0) : null, dd: sl.inside.length ? maxDrawdown([sl.base].concat(sl.inside)) : null, st: tradeStats(tradesIn(e, period)), a, pos: (e.status.positions || []).length };
+    const tr = tradesIn(e, period), st = tradeStats(tr);
+    const ret = sl.base ? (last ? (last.v / sl.base.v - 1) * 100 : 0) : null;
+    return { e, ret, retNet: ret != null && sl.base ? ret - st.costs / sl.base.v * 100 : null, dd: sl.inside.length ? maxDrawdown([sl.base].concat(sl.inside)) : null, st, a, pos: (e.status.positions || []).length, all: e.trades.length };
   });
+  // SPY bought and held over the same period
+  if (m.benchmark && m.benchmark.length) {
+    const sl = sliceFor({ equity: m.benchmark }, period), last = sl.inside.length ? sl.inside[sl.inside.length - 1] : null;
+    if (sl.base && last) cols.push({ bench: true, ret: (last.v / sl.base.v - 1) * 100, dd: maxDrawdown([sl.base].concat(sl.inside)) });
+  }
   const pf = (x) => x == null ? "–" : x === Infinity ? "∞" : x.toFixed(2);
+  const sideCell = (x) => !x.n ? "–" : x.n + " · " + (x.winRate == null ? "–" : x.winRate.toFixed(0) + "% won") + " · " + smoney(x.net, 0);
+  const ddCell = (c) => c.dd == null ? "–" : h("span", { class: c.dd < 0 ? "loss" : "" }, c.dd < 0 ? "−" + Math.abs(c.dd).toFixed(2) + "%" : "0.00%");
   const rows = [
-    ["Return", "Change in account value over the period", (c) => c.ret == null ? "–" : h("span", { class: tone(c.ret) }, arrow(c.ret) + spct(c.ret))],
-    ["Worst drop", "Biggest fall from a high point", (c) => c.dd == null ? "–" : h("span", { class: c.dd < 0 ? "loss" : "" }, c.dd < 0 ? "−" + Math.abs(c.dd).toFixed(2) + "%" : "0.00%")],
+    ["Return", "Change in account value, as Alpaca reports it", (c) => c.ret == null ? "–" : h("span", { class: tone(c.ret) }, arrow(c.ret) + spct(c.ret)), true],
+    ["Return after estimated costs", "Takes off slippage and fees a real account would likely pay", (c) => c.retNet == null ? "–" : h("span", { class: tone(c.retNet) }, arrow(c.retNet) + spct(c.retNet))],
+    ["Worst drop", "Biggest fall from a high point", ddCell, true],
     ["Win rate", "Share of closed trades that made money", (c) => c.st.winRate == null ? "–" : c.st.winRate.toFixed(0) + "% (" + c.st.wins + " of " + c.st.n + ")"],
-    ["Closed trades", null, (c) => String(c.st.n)],
+    ["Closed trades", "In this period", (c) => String(c.st.n)],
+    ["Trades so far", SAMPLE_NOTE, (c) => h("span", null, String(c.all), h("div", { style: "margin-top:4px" }, sampleBadge(c.all)))],
     ["Average win", null, (c) => c.st.avgWin == null ? "–" : h("span", { class: "gain" }, smoney(c.st.avgWin))],
     ["Average loss", null, (c) => c.st.avgLoss == null ? "–" : h("span", { class: "loss" }, smoney(c.st.avgLoss))],
+    ["Average result per trade", "In multiples of the amount risked (1 R = the stop-loss amount)", (c) => c.st.avgR == null ? "–" : (c.st.avgR > 0 ? "+" : c.st.avgR < 0 ? "−" : "") + Math.abs(c.st.avgR).toFixed(2) + " R"],
     ["Profit factor", "Total won divided by total lost", (c) => pf(c.st.profitFactor)],
+    ["Long trades", "Count · win rate · result after costs", (c) => sideCell(c.st.long)],
+    ["Short trades", "Count · win rate · result after costs", (c) => sideCell(c.st.short)],
+    ["Estimated costs", "Slippage and fees in this period", (c) => c.st.n ? money(c.st.costs) : "–"],
     ["Account value", null, (c) => money(c.a.equity, 0)],
     ["Today", null, (c) => c.a.day_pnl == null ? "–" : h("span", { class: tone(c.a.day_pnl) }, arrow(c.a.day_pnl) + smoney(c.a.day_pnl))],
     ["Open positions", null, (c) => String(c.pos)],
   ];
   const t = h("table", { class: "t cmp" });
-  t.append(h("thead", null, h("tr", null, h("th", { text: "" }), cols.map((c) => h("th", { class: "colh" }, swatchEl(colorOf(m, c.e.meta.id)), c.e.meta.name || c.e.meta.id)))));
-  t.append(h("tbody", null, rows.map(([label, hint, f]) => h("tr", null, h("td", { class: "rowh" }, label, hint ? h("span", { class: "hint", text: hint }) : null), cols.map((c) => h("td", { class: "num" }, f(c)))))));
+  t.append(h("thead", null, h("tr", null, h("th", { text: "" }), cols.map((c) => h("th", { class: "colh" }, c.bench ? swatchEl("var(--ink-3)", false, true) : swatchEl(colorOf(m, c.e.meta.id)), c.bench ? "SPY buy and hold" : (c.e.meta.name || c.e.meta.id))))));
+  t.append(h("tbody", null, rows.map(([label, hint, f, benchToo]) => h("tr", null, h("td", { class: "rowh" }, label, hint ? h("span", { class: "hint", text: hint }) : null), cols.map((c) => h("td", { class: "num" + (c.bench && !benchToo ? " na" : "") }, c.bench ? (benchToo ? f(c) : "–") : f(c)))))));
   return card("Side by side", period.range === "day" ? period.label : "From " + stamp(period.start), cols.length ? h("div", { class: "tablewrap" }, t) : emptyNote("No strategies are switched on yet."));
 }
 
@@ -1538,6 +1792,7 @@ function renderStrategyCards(m) {
         num2("Since start", arrow(total) + smoney(total, 0), tone(total)),
         num2("Open positions", String((e.status.positions || []).length)))
         : h("p", { class: "small muted", text: (e.status.bot && e.status.bot.message) || "No API keys yet." }),
+      on ? h("div", { class: "small" }, sampleBadge(e.trades.length), " ", h("span", { class: "muted", text: e.trades.length + " closed trades so far" })) : null,
       h("div", null, h("button", { class: "btn", type: "button", onclick: () => setView(e.meta.id) }, on ? "Open details" : "How to switch it on")));
   });
   return card("The strategies", "Each one trades its own paper account", h("div", { class: "scards" }, cards));
@@ -1557,6 +1812,86 @@ function renderCompareView(m) {
   return out;
 }
 
+/* ---------- backtest view ---------- */
+function renderBacktestView(m) {
+  const out = renderBanners([], m.demo), bt = m.backtest;
+  if (!bt) {
+    out.push(card("Backtest", "Replay the strategies over past days",
+      h("p", { class: "muted", text: "No backtest results yet. A backtest replays the same rules, whole-share sizing, limit-order entries and estimated costs over the last couple of months of 1-minute prices, so you can see roughly what each strategy would have done before waiting weeks for live results." }),
+      h("ol", { class: "setup-steps" },
+        h("li", { text: "In your GitHub repo, open the Actions tab and choose Backtest in the list on the left." }),
+        h("li", { text: "Press Run workflow. The defaults (60 days, $5,000) are a good start." }),
+        h("li", { text: "It takes about 10 to 30 minutes. When it finishes it saves its results to the repo, and they appear here after you press Refresh." }))),
+      renderFoot(m));
+    return out;
+  }
+  const bal = bt.balance || 5000, ms = (d) => Date.parse(d + "T20:00:00Z"), dayStamp = (t) => fDay.format(t);
+  const spy = bt.benchmark && bt.benchmark.points && bt.benchmark.points.length ? bt.benchmark.points : null;
+  // every line starts at 0% and is shown as percent change after estimated costs
+  const dates = new Set();
+  bt.strategies.forEach((x) => x.equity.forEach((e) => dates.add(e[0])));
+  if (spy) spy.forEach((p) => dates.add(p[0]));
+  const ds = Array.from(dates).sort(), ts = [ms(ds[0]) - 86400000].concat(ds.map(ms));   // the extra first point is the starting balance
+  const line = (get) => { let last = null; return [{ t: ts[0], pct: 0, val: bal }].concat(ds.map((d, i) => { const v = get(d); if (v != null) last = v; const pctv = last == null ? 0 : last; return { t: ts[i + 1], pct: pctv, val: bal * (1 + pctv / 100) }; })); };
+  const series = bt.strategies.map((x, i) => {
+    const mp = new Map(x.equity.map((e) => [e[0], (e[2] / bal - 1) * 100]));
+    return { id: x.id, name: x.name, color: colorVar(Math.max(0, m.strategies.findIndex((q) => q.id === x.id) >= 0 ? m.strategies.findIndex((q) => q.id === x.id) : i)), pts: line((d) => (mp.has(d) ? mp.get(d) : null)) };
+  });
+  if (spy) {
+    const mp = new Map(spy.map((p) => [p[0], (p[1] / spy[0][1] - 1) * 100]));
+    series.push({ id: "spy", name: "SPY buy and hold", color: "var(--ink-3)", dashed: true, bench: true, pts: line((d) => (mp.has(d) ? mp.get(d) : null)) });
+  }
+  const host = h("div", { class: "chart-host" });
+  charts.push(() => drawCompare(host, { ts, series }, { label: "Backtest: percent return after estimated costs, by day", xticks: makeXticks("all"), stamp: dayStamp, empty: "Not enough days to draw." }));
+  const legend = h("div", { class: "legend" }, series.map((x) => { const last = x.pts[x.pts.length - 1]; return h("span", { class: "legend-item" }, swatchEl(x.color, false, x.dashed), x.name, last ? h("b", { class: tone(last.pct), text: spct(last.pct) }) : null); }));
+
+  out.push(card("Backtest", bt.days + " trading days, " + bt.start + " to " + bt.end + ", on a " + money(bal, 0) + " account",
+    h("p", { class: "muted", text: "This replays each strategy on past 1-minute prices with the same rules, whole-share sizing, limit-order entries and estimated costs as the live bot. Treat it as a rehearsal: the settings were not tuned to this data, but a few weeks is still a small sample, and the free price feed covers only part of the market." }),
+    bt.generated_at ? h("p", { class: "note", text: "Run " + ago(Date.parse(bt.generated_at)) + " · " + stamp(Date.parse(bt.generated_at)) }) : null));
+  out.push(card("Return after estimated costs", "Every line starts at 0%", legend, host,
+    dataDetails("Show values", tableOf([{ label: "Day" }].concat(series.map((x) => ({ label: x.name, num: true }))), ds.map((d, i) => [d].concat(series.map((x) => spct(x.pts[i + 1].pct)))).reverse().slice(0, 60)))));
+
+  const pf = (x) => x == null ? "–" : x === Infinity ? "∞" : Number(x).toFixed(2);
+  const sideCell = (x) => !x || !x.trades ? "–" : x.trades + " · " + (x.win_rate == null ? "–" : Number(x.win_rate).toFixed(0) + "% won") + " · " + smoney(x.pnl_net, 0);
+  const spyRet = spy ? (spy[spy.length - 1][1] / spy[0][1] - 1) * 100 : null;
+  let pk = -Infinity, spyDd = 0;
+  if (spy) spy.forEach((p) => { pk = Math.max(pk, p[1]); spyDd = Math.min(spyDd, (p[1] - pk) / pk * 100); });
+  const cols = bt.strategies.map((x) => ({ x, su: x.summary || {} }));
+  const rows = [
+    ["Return before costs", null, (c) => c.su.return_gross_pct == null ? "–" : h("span", { class: tone(c.su.return_gross_pct) }, spct(c.su.return_gross_pct))],
+    ["Return after estimated costs", "Slippage and fees a real account would likely pay", (c) => c.su.return_net_pct == null ? "–" : h("span", { class: tone(c.su.return_net_pct) }, arrow(c.su.return_net_pct) + spct(c.su.return_net_pct))],
+    ["Costs", "Total estimated slippage and fees", (c) => c.su.costs == null ? "–" : money(c.su.costs, 0)],
+    ["Worst drop", "Biggest fall from a high point, after costs", (c) => c.su.max_drawdown_pct == null ? "–" : h("span", { class: c.su.max_drawdown_pct < 0 ? "loss" : "" }, c.su.max_drawdown_pct < 0 ? "−" + Math.abs(c.su.max_drawdown_pct).toFixed(2) + "%" : "0.00%")],
+    ["Trades", SAMPLE_NOTE, (c) => h("span", null, String(c.su.trades || 0), h("div", { style: "margin-top:4px" }, sampleBadge(c.su.trades || 0)))],
+    ["Win rate", null, (c) => c.su.win_rate == null ? "–" : Number(c.su.win_rate).toFixed(0) + "%"],
+    ["Profit factor after costs", "Total won divided by total lost", (c) => pf(c.su.profit_factor_net)],
+    ["Average result per trade", "In multiples of the amount risked", (c) => c.su.avg_r == null ? "–" : (c.su.avg_r > 0 ? "+" : c.su.avg_r < 0 ? "−" : "") + Math.abs(c.su.avg_r).toFixed(2) + " R"],
+    ["Average time in a trade", null, (c) => c.su.avg_hold_min == null ? "–" : c.su.avg_hold_min < 90 ? Math.round(c.su.avg_hold_min) + " min" : c.su.avg_hold_min < 36 * 60 ? (c.su.avg_hold_min / 60).toFixed(1) + " h" : (c.su.avg_hold_min / 1440).toFixed(1) + " d"],
+    ["Long trades", "Count · win rate · result after costs", (c) => sideCell(c.su.long)],
+    ["Short trades", "Count · win rate · result after costs", (c) => sideCell(c.su.short)],
+  ];
+  const t = h("table", { class: "t cmp" });
+  t.append(h("thead", null, h("tr", null, h("th", { text: "" }), cols.map((c) => h("th", { class: "colh" }, swatchEl(colorVar(Math.max(0, m.strategies.findIndex((q) => q.id === c.x.id)))), c.x.name)), spy ? h("th", { class: "colh" }, swatchEl("var(--ink-3)", false, true), "SPY buy and hold") : null)));
+  t.append(h("tbody", null, rows.map(([label, hint, f], ri) => h("tr", null, h("td", { class: "rowh" }, label, hint ? h("span", { class: "hint", text: hint }) : null), cols.map((c) => h("td", { class: "num" }, f(c))),
+    spy ? h("td", { class: "num na" }, ri === 1 ? h("span", { class: tone(spyRet) }, arrow(spyRet) + spct(spyRet)) : ri === 0 ? h("span", { class: tone(spyRet) }, spct(spyRet)) : ri === 3 ? "−" + Math.abs(spyDd).toFixed(2) + "%" : "–") : null))));
+  out.push(card("Side by side", "Whole period", h("div", { class: "tablewrap" }, t)));
+
+  // does it hold up on days the numbers were not looked at? first part vs the last part
+  const pt = (p, kind) => !p || !p.trades ? "–" : p.trades + " trades · " + spct(p.return_net_pct) + " · PF " + pf(p.profit_factor_net);
+  const holds = bt.strategies.map((x) => {
+    const e = x.earlier_part || {}, l = x.later_part || {};
+    const ep = e.profit_factor_net, lp = l.profit_factor_net, enough = e.trades >= 5 && l.trades >= 5 && ep != null && lp != null;
+    const verdict = !enough ? "Too few trades to say" : ep >= 1 && lp >= 1 ? "Profitable in both parts" : ep >= 1 ? h("span", { class: "faded", text: "Faded in the later part" }) : lp >= 1 ? "Lost early, made money later (could be luck)" : h("span", { class: "faded", text: "Lost money in both parts" });
+    return [h("span", { class: "legend-item" }, swatchEl(colorVar(Math.max(0, m.strategies.findIndex((q) => q.id === x.id)))), x.name), "through " + (e.through || "–") + ": " + pt(e), "after: " + pt(l), verdict];
+  });
+  out.push(card("Does it hold up?", "The first 70% of days compared with the last 30%",
+    h("p", { class: "muted", style: "margin-bottom:10px", text: "A strategy that looks good on every slice of the period is more believable than one that made all its money early. “PF” is profit factor after costs: above 1 means more won than lost." }),
+    tableOf([{ label: "Strategy" }, { label: "Earlier part" }, { label: "Later part" }, { label: "Verdict" }], holds)));
+  if (bt.data_note) out.push(h("p", { class: "note", text: bt.data_note }));
+  out.push(renderFoot(m));
+  return out;
+}
+
 function renderSingleView(m, e) {
   const out = renderBanners([e], m.demo);
   if (!isConfigured(e)) { out.push(renderNotSetUp(m, e), renderStrategy(e), renderFoot(m, e)); return out; }
@@ -1571,13 +1906,14 @@ function renderViews() {
   const tabs = [];
   if (m.strategies.length > 1) tabs.push({ id: "compare", label: "Compare", node: h("span", { class: "g", "aria-hidden": "true", text: "≈" }) });
   m.strategies.forEach((s, i) => tabs.push({ id: s.id, label: s.name || s.id, node: swatchEl(colorVar(i)) }));
+  tabs.push({ id: "backtest", label: "Backtest", node: h("span", { class: "g", "aria-hidden": "true", text: "↺" }) });
   box.replaceChildren(...tabs.map((t) => h("button", { type: "button", role: "tab", "aria-selected": String(ui.view === t.id), onclick: () => setView(t.id) }, t.node, t.label)));
 }
 function renderHeader() {
   const m = model;
-  $("#brand-sub").textContent = !m ? "Paper accounts" : ui.view === "compare" ? activeEntries(m).length + " paper accounts" : "Paper account · " + nameOf(m, ui.view);
+  $("#brand-sub").textContent = !m ? "Paper accounts" : ui.view === "compare" ? activeEntries(m).length + " paper accounts" : ui.view === "backtest" ? "Replay of past days" : "Paper account · " + nameOf(m, ui.view);
   renderViews();
-  const e = m && ui.view !== "compare" ? m.byId[ui.view] : null;
+  const e = m && ui.view !== "compare" && ui.view !== "backtest" ? m.byId[ui.view] : null;
   const hl = m ? (e ? healthOf(e) : healthAll(m)) : null, hs = $("#health");
   hs.replaceChildren(...(hl ? [chip(hl.label, hl.tone, hl.glyph)] : []));
   hs.title = hl && hl.detail ? hl.detail : "";
@@ -1603,7 +1939,7 @@ function render() {
     renderHeader();
     return;
   }
-  const body = ui.view === "compare" && model.strategies.length > 1 ? renderCompareView(model) : renderSingleView(model, model.byId[ui.view] || entriesOf(model)[0]);
+  const body = ui.view === "backtest" ? renderBacktestView(model) : ui.view === "compare" && model.strategies.length > 1 ? renderCompareView(model) : renderSingleView(model, model.byId[ui.view] || entriesOf(model)[0]);
   app.replaceChildren(...body);
   renderHeader();
   requestAnimationFrame(drawAll);
@@ -1613,7 +1949,7 @@ function renderEmpty(err) {
   return card("No bot data yet", null,
     h("p", { class: "muted", text: "This page reads files the bot publishes to the “" + CONFIG.dataBranch + "” branch of " + CONFIG.owner + "/" + CONFIG.repo + ". That branch is created the first time the bot runs." }),
     h("ol", { class: "rules" },
-      h("li", { text: "Check that bot.py, strategies.py, publisher.py and the workflow file in your repo are the newest versions." }),
+      h("li", { text: "Check that bot.py, strategies.py, indicators.py, publisher.py and the workflow file in your repo are the newest versions." }),
       h("li", { text: "Open the repo's Actions tab, choose Trading Bot, and press Run workflow." }),
       h("li", { text: "When the run finishes, come back here and press Refresh." })),
     h("p", { class: "small muted", style: "margin-top:12px", text: "Technical detail: " + err.message }),
@@ -1624,6 +1960,7 @@ let demoCache = null;
 function fixView() {
   if (!model) return;
   const ids = model.strategies.map((s) => s.id);
+  if (ui.view === "backtest") return;
   if (ui.view === "compare" ? ids.length < 2 : !ids.includes(ui.view)) ui.view = ids.length > 1 ? "compare" : ids[0];
 }
 async function refresh() {
