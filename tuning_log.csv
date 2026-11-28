@@ -71,3 +71,5 @@ date,symbol,rsi_period,rsi_oversold,rsi_overbought,stop_loss_pct,take_profit_pct
 2026-11-26,ALL (suggested),21,25,75,0.006,0.012,-12.51,778
 2026-11-27,ALL (current),14,30,70,0.004,0.008,-134.59,2047
 2026-11-27,ALL (suggested),21,25,75,0.006,0.012,-12.03,769
+2026-11-28,ALL (current),14,30,70,0.004,0.008,-131.17,2061
+2026-11-28,ALL (suggested),21,25,75,0.006,0.012,-15.03,779

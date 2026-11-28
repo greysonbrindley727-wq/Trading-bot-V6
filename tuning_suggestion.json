@@ -1,5 +1,5 @@
 {
-  "date": "2026-11-27",
+  "date": "2026-11-28",
   "lookback_days": 30,
   "stocks": [
     "AAPL",
@@ -19,8 +19,8 @@
     "rsi_overbought": 70,
     "stop_loss_pct": 0.004,
     "take_profit_pct": 0.008,
-    "return_pct": -134.59,
-    "num_trades": 2047
+    "return_pct": -131.17,
+    "num_trades": 2061
   },
   "best": {
     "rsi_period": 21,
@@ -28,10 +28,10 @@
     "rsi_overbought": 75,
     "stop_loss_pct": 0.006,
     "take_profit_pct": 0.012,
-    "return_pct": -12.03,
-    "num_trades": 769
+    "return_pct": -15.03,
+    "num_trades": 779
   },
   "would_change": true,
-  "note": "The best combination beat the current settings by 122.56 percentage points (need 1). Not applied: the tuner only suggests.",
+  "note": "The best combination beat the current settings by 116.14 percentage points (need 1). Not applied: the tuner only suggests.",
   "applied": false
 }
